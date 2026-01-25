@@ -28,19 +28,24 @@ import java.util.*;
 /**
  * Handles the in-game editor for Market listings.
  * <p>
- * Interactions:
+ * This class allows admins to visually edit market items, prices, and currencies
+ * without modifying YAML files manually. It supports preserving item metadata
+ * (enchants, NBT, custom lore) while editing.
+ * </p>
+ * <p>
+ * <b>Interactions:</b>
  * <ul>
  * <li><b>Drag/Drop:</b> Add items to the market.</li>
- * <li><b>Shift + Left Click:</b> Set Buy Price (Chat).</li>
- * <li><b>Shift + Right Click:</b> Set Sell Price (Chat).</li>
- * <li><b>Middle Click (Scroll):</b> Cycle Currency.</li>
+ * <li><b>Shift + Left Click:</b> Set Buy Price (via Chat).</li>
+ * <li><b>Shift + Right Click:</b> Set Sell Price (via Chat).</li>
+ * <li><b>Middle Click (Scroll):</b> Cycle through available currencies.</li>
  * </ul>
  * </p>
  */
 public class MarketEditor implements Listener {
 
     private final JavaPlugin plugin;
-    private final MarketProvider provider; // Added reference to provider
+    private final MarketProvider provider;
     private final File marketFolder;
 
     // Keys for storing data on the ItemStack itself
@@ -55,11 +60,11 @@ public class MarketEditor implements Listener {
     private final List<String> currencies = List.of("coin", "copper", "silver", "gold");
 
     /**
-     * Constructs the MarketEditor.
+     * Constructs a new MarketEditor.
      *
-     * @param plugin       The host plugin.
-     * @param provider     The market data provider (for cache refreshing).
-     * @param marketFolder The folder containing market YML files.
+     * @param plugin       The host plugin instance.
+     * @param provider     The market data provider (used for cache invalidation).
+     * @param marketFolder The folder containing market configuration files.
      */
     public MarketEditor(JavaPlugin plugin, MarketProvider provider, File marketFolder) {
         this.plugin = plugin;
@@ -72,16 +77,19 @@ public class MarketEditor implements Listener {
 
     /**
      * Opens the editor GUI for a specific market.
+     * <p>
+     * Loads items from the YAML file, applies editor metadata (prices/currency) onto
+     * the items, and displays them in a 54-slot inventory.
+     * </p>
      *
-     * @param player     The admin player.
-     * @param marketName The name of the market file.
+     * @param player     The admin player opening the editor.
+     * @param marketName The name of the market file (without extension).
      */
     public void openEditor(Player player, String marketName) {
         File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
         Inventory gui = Bukkit.createInventory(null, 54, "Edit Market: " + marketName);
 
-        // Load items from YAML
         for (String key : config.getKeys(false)) {
             if (key.equals("name")) continue; // Skip metadata
             ConfigurationSection section = config.getConfigurationSection(key);
@@ -103,7 +111,7 @@ public class MarketEditor implements Listener {
             int sell = section.getInt("sell.price", -1);
             String currency = section.getString("currency", "coin");
 
-            // Apply Data & Lore
+            // Apply Data & Lore for the editor view
             updateItemData(item, buy, sell, currency);
             gui.setItem(slot, item);
         }
@@ -113,7 +121,12 @@ public class MarketEditor implements Listener {
     }
 
     /**
-     * Handles interactions in the editor GUI.
+     * Handles clicks within the editor GUI.
+     * <p>
+     * Detects shift-clicks for price editing and middle-clicks for currency cycling.
+     * </p>
+     *
+     * @param event The inventory click event.
      */
     @EventHandler
     public void onClick(InventoryClickEvent event) {
@@ -147,7 +160,6 @@ public class MarketEditor implements Listener {
         else if (event.getClick() == ClickType.MIDDLE) {
             event.setCancelled(true);
             
-            // Read current data
             ItemMeta meta = item.getItemMeta();
             if (meta == null) return;
             PersistentDataContainer container = meta.getPersistentDataContainer();
@@ -169,6 +181,12 @@ public class MarketEditor implements Listener {
 
     /**
      * Handles chat input for price editing.
+     * <p>
+     * Captures the number typed by the player, updates the item in the GUI,
+     * and re-saves the market.
+     * </p>
+     *
+     * @param event The chat event.
      */
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
@@ -213,6 +231,8 @@ public class MarketEditor implements Listener {
 
     /**
      * Saves the market configuration when the inventory is closed.
+     *
+     * @param event The inventory close event.
      */
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
@@ -227,6 +247,13 @@ public class MarketEditor implements Listener {
 
     /**
      * Writes the current inventory state to the YAML file.
+     * <p>
+     * Cleans up editor-specific data (lore, PDC keys) before saving to ensure
+     * the item on disk is the "pure" version (e.g., usable in-game).
+     * </p>
+     *
+     * @param player The player performing the save.
+     * @param inv    The inventory to save.
      */
     private void saveMarket(Player player, Inventory inv) {
         String marketName = editingMarket.get(player.getUniqueId());
@@ -249,7 +276,7 @@ public class MarketEditor implements Listener {
             int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
             String currency = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
 
-            // Clean item for saving (Remove Editor Lore)
+            // Clone item for saving to keep it pure (remove editor artifacts)
             ItemStack saveItem = item.clone();
             cleanItemForSave(saveItem);
 
@@ -265,25 +292,39 @@ public class MarketEditor implements Listener {
 
         try { 
             config.save(file);
-            // CRITICAL FIX: Reload the provider cache immediately after saving
+            // CRITICAL: Reload the provider cache immediately after saving so changes apply instantly
             provider.loadMarkets(); 
         } catch (IOException e) { e.printStackTrace(); }
     }
 
     /**
      * Updates an ItemStack with new price data and refreshes the Lore.
+     * <p>
+     * This method preserves existing item lore (e.g., from CrackShot or RPG plugins)
+     * and appends the editor instructions at the bottom.
+     * </p>
+     *
+     * @param item     The item to update.
+     * @param buy      The buy price.
+     * @param sell     The sell price.
+     * @param currency The currency type.
      */
     private void updateItemData(ItemStack item, int buy, int sell, String currency) {
         ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
-        // Save Raw Data
+        // 1. Save Raw Data
         pdc.set(keyBuy, PersistentDataType.INTEGER, buy);
         pdc.set(keySell, PersistentDataType.INTEGER, sell);
         pdc.set(keyCurrency, PersistentDataType.STRING, currency);
 
-        // Update Visual Lore
-        List<String> lore = new ArrayList<>();
+        // 2. Prepare Lore
+        List<String> lore = meta.hasLore() ? meta.getLore() : new ArrayList<>();
+        
+        // Remove old editor lines if present (to avoid stacking instructions)
+        removeEditorLore(lore);
+
+        // Append Editor Lines
         lore.add(ChatColor.DARK_GRAY + "----------------");
         lore.add(ChatColor.GREEN + "Buy: " + (buy >= 0 ? buy : "N/A"));
         lore.add(ChatColor.AQUA + "Sell: " + (sell >= 0 ? sell : "N/A"));
@@ -297,22 +338,50 @@ public class MarketEditor implements Listener {
     }
 
     /**
-     * Removes the editor-specific lore before saving to disk.
+     * Cleans the item of all Editor traces (Lore + PDC) for pure saving.
+     * <p>
+     * Removes the editor-specific lore lines and the persistent data keys
+     * used for temporary storage in the GUI.
+     * </p>
+     *
+     * @param item The item to clean.
      */
     private void cleanItemForSave(ItemStack item) {
         ItemMeta meta = item.getItemMeta();
-        List<String> lore = meta.getLore();
-        if (lore != null) {
-            // Remove our injected lines (last 7 lines based on updateItemData)
-            if (lore.size() >= 7 && lore.get(lore.size() - 1).contains("Middle Click")) {
-                for (int i = 0; i < 7; i++) {
-                    lore.remove(lore.size() - 1);
-                }
-            }
+        if (meta == null) return;
+
+        // 1. Remove Editor Lore
+        if (meta.hasLore()) {
+            List<String> lore = meta.getLore();
+            removeEditorLore(lore);
             meta.setLore(lore);
-            item.setItemMeta(meta);
+        }
+
+        // 2. Remove Editor Keys (PDC) so they don't stick to the item in YAML
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        pdc.remove(keyBuy);
+        pdc.remove(keySell);
+        pdc.remove(keyCurrency);
+
+        item.setItemMeta(meta);
+    }
+
+    /**
+     * Helper to strip the last 7 lines if they match the editor format.
+     *
+     * @param lore The lore list to modify.
+     */
+    private void removeEditorLore(List<String> lore) {
+        // Safety check: ensure we only remove lines if the last line matches our known footer
+        if (lore.size() >= 7 && lore.get(lore.size() - 1).contains("Middle Click")) {
+            for (int i = 0; i < 7; i++) {
+                lore.remove(lore.size() - 1);
+            }
         }
     }
 
+    /**
+     * Simple record to store pending edit actions.
+     */
     private record EditAction(int slot, String type) {}
 }
