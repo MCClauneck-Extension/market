@@ -4,11 +4,17 @@ import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.listener.MarketListener;
 import io.github.mcengine.mcextension.api.IMCExtension;
+import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandMap;
+import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.Collections;
 import java.util.concurrent.Executor;
 
 /**
@@ -35,7 +41,7 @@ public class Market implements IMCExtension {
      * <li>Creates the example 'ore.yml' file if it doesn't exist.</li>
      * <li>Initializes the {@link MarketProvider} with the plugin instance and data folder.</li>
      * <li>Registers the {@link MarketListener} with Bukkit's PluginManager.</li>
-     * <li>Registers the {@link MarketCommand} to handle player commands.</li>
+     * <li>Registers the {@link MarketCommand} to handle player commands via Reflection.</li>
      * </ol>
      * </p>
      *
@@ -60,14 +66,31 @@ public class Market implements IMCExtension {
         // 4. Register Listener
         plugin.getServer().getPluginManager().registerEvents(new MarketListener(provider), plugin);
 
-        // 5. Register Command
-        // Note: Ensure "market" is defined in MCEconomy's plugin.yml or registered dynamically
-        if (plugin.getCommand("market") != null) {
-            plugin.getCommand("market").setExecutor(new MarketCommand(provider));
-        } else {
-            plugin.getLogger().warning("Could not register '/market' command. Is it defined in plugin.yml?");
+        // 5. Register Command (Runtime Reflection)
+        // Since this is an extension, the command is not in plugin.yml, so we inject it into the CommandMap.
+        try {
+            Field commandMapField = Bukkit.getServer().getClass().getDeclaredField("commandMap");
+            commandMapField.setAccessible(true);
+            CommandMap commandMap = (CommandMap) commandMapField.get(Bukkit.getServer());
+
+            MarketCommand marketExecutor = new MarketCommand(provider);
+
+            // Create a dynamic Command object
+            Command cmd = new Command("market", "Open the market GUI", "/market <name>", Collections.emptyList()) {
+                @Override
+                public boolean execute(CommandSender sender, String commandLabel, String[] args) {
+                    return marketExecutor.onCommand(sender, this, commandLabel, args);
+                }
+            };
+
+            // Register with the plugin's name as the fallback prefix (e.g., /mceconomy:market)
+            commandMap.register(plugin.getName(), cmd);
+
+        } catch (Exception e) {
+            plugin.getLogger().severe("Failed to register /market command: " + e.getMessage());
+            e.printStackTrace();
         }
-        
+
         plugin.getLogger().info("Market Extension Loaded Successfully.");
     }
 
