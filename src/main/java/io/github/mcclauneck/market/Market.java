@@ -3,6 +3,7 @@ package io.github.mcclauneck.market;
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.listener.MarketListener;
+import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
 import io.github.mcengine.mcextension.api.IMCExtension;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -15,6 +16,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
@@ -41,7 +43,7 @@ public class Market implements IMCExtension {
      * <li>Creates the example 'ore.yml' file if it doesn't exist.</li>
      * <li>Initializes the {@link MarketProvider} with the plugin instance and data folder.</li>
      * <li>Registers the {@link MarketListener} with Bukkit's PluginManager.</li>
-     * <li>Registers the {@link MarketCommand} to handle player commands via Reflection.</li>
+     * <li>Registers the {@link MarketCommand} and {@link MarketTabCompleter} via Reflection.</li>
      * </ol>
      * </p>
      *
@@ -66,14 +68,14 @@ public class Market implements IMCExtension {
         // 4. Register Listener
         plugin.getServer().getPluginManager().registerEvents(new MarketListener(provider), plugin);
 
-        // 5. Register Command (Runtime Reflection)
-        // Since this is an extension, the command is not in plugin.yml, so we inject it into the CommandMap.
+        // 5. Register Command & TabCompleter (Runtime Reflection)
         try {
             Field commandMapField = Bukkit.getServer().getClass().getDeclaredField("commandMap");
             commandMapField.setAccessible(true);
             CommandMap commandMap = (CommandMap) commandMapField.get(Bukkit.getServer());
 
             MarketCommand marketExecutor = new MarketCommand(provider);
+            MarketTabCompleter marketTabCompleter = new MarketTabCompleter(provider);
 
             // Create a dynamic Command object
             Command cmd = new Command("market", "Open the market GUI", "/market <name>", Collections.emptyList()) {
@@ -81,9 +83,14 @@ public class Market implements IMCExtension {
                 public boolean execute(CommandSender sender, String commandLabel, String[] args) {
                     return marketExecutor.onCommand(sender, this, commandLabel, args);
                 }
+
+                @Override
+                public List<String> tabComplete(CommandSender sender, String alias, String[] args) throws IllegalArgumentException {
+                    return marketTabCompleter.onTabComplete(sender, this, alias, args);
+                }
             };
 
-            // Register with the plugin's name as the fallback prefix (e.g., /mceconomy:market)
+            // Register with the plugin's name as the fallback prefix
             commandMap.register(plugin.getName(), cmd);
 
         } catch (Exception e) {

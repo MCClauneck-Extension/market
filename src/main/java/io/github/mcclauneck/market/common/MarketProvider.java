@@ -197,6 +197,14 @@ public class MarketProvider implements IMarket {
     }
 
     /**
+     * Gets a set of all loaded market names.
+     * @return A set of strings representing valid market names.
+     */
+    public java.util.Set<String> getMarketNames() {
+        return marketCache.keySet();
+    }
+
+    /**
      * A simple data record representing a single item in the market.
      *
      * @param material  The Bukkit Material of the item.
