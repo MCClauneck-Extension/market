@@ -56,6 +56,7 @@ public class MarketCommand implements CommandExecutor {
             return true;
         }
 
+        // Note: The "edit" subcommand logic is intercepted in Market.java
         if (args.length == 0) {
             player.sendMessage(ChatColor.RED + "Usage: /market <name>");
             return true;
@@ -75,6 +76,11 @@ public class MarketCommand implements CommandExecutor {
 
     /**
      * Creates and opens the market inventory GUI for the player.
+     * <p>
+     * This method clones the items from the provider and appends pricing information
+     * to the lore for display purposes. This ensures the player sees the price
+     * but receives the clean item upon purchase.
+     * </p>
      *
      * @param player     The player to open the GUI for.
      * @param marketName The name of the market (used in the title).
@@ -87,13 +93,16 @@ public class MarketCommand implements CommandExecutor {
 
         items.forEach((slot, itemData) -> {
             if (slot >= 0 && slot < 54) {
-                ItemStack itemStack = new ItemStack(itemData.material(), itemData.amount());
-                ItemMeta meta = itemStack.getItemMeta();
+                // CRITICAL FIX: Clone the stored item so we don't modify the cache or the item given to player
+                ItemStack displayItem = itemData.itemStack().clone();
+                ItemMeta meta = displayItem.getItemMeta();
                 
                 if (meta != null) {
-                    List<String> lore = new ArrayList<>();
+                    // Append Price Lore to existing lore
+                    List<String> lore = meta.hasLore() ? meta.getLore() : new ArrayList<>();
                     
-                    // Format Lore
+                    lore.add(ChatColor.DARK_GRAY + "----------------");
+                    
                     if (itemData.buyPrice() >= 0) {
                         lore.add(ChatColor.GREEN + "Buy: " + itemData.buyPrice() + " " + itemData.currency());
                     } else {
@@ -106,11 +115,13 @@ public class MarketCommand implements CommandExecutor {
                         lore.add(ChatColor.RED + "Sell: N/A");
                     }
                     
+                    lore.add(ChatColor.YELLOW + "Left-Click to Buy | Right-Click to Sell");
+                    
                     meta.setLore(lore);
-                    itemStack.setItemMeta(meta);
+                    displayItem.setItemMeta(meta);
                 }
                 
-                gui.setItem(slot, itemStack);
+                gui.setItem(slot, displayItem);
             }
         });
 

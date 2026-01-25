@@ -14,7 +14,6 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.Executor;
 
 /**
  * The core logic implementation for the Market extension.
@@ -61,13 +60,17 @@ public class MarketProvider implements IMarket {
      * Loads (or reloads) all .yml configuration files from the Market folder into memory.
      * <p>
      * This method iterates through files in {@link #marketFolder}, parses item data
-     * (material, price, currency, position), and populates the {@link #marketCache}.
+     * (including full ItemStack metadata), and populates the {@link #marketCache}.
      * </p>
      */
     public void loadMarkets() {
+        marketCache.clear(); // Clear cache before reloading
         if (!marketFolder.exists()) return;
 
-        for (File file : Objects.requireNonNull(marketFolder.listFiles((dir, name) -> name.endsWith(".yml")))) {
+        File[] files = marketFolder.listFiles((dir, name) -> name.endsWith(".yml"));
+        if (files == null) return;
+
+        for (File file : files) {
             String marketName = file.getName().replace(".yml", "");
             YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
             Map<Integer, MarketItem> items = new HashMap<>();
@@ -79,13 +82,20 @@ public class MarketProvider implements IMarket {
                 if (section == null) continue;
 
                 int position = section.getInt("position");
-                Material material = Material.matchMaterial(section.getString("material", "STONE"));
-                int amount = section.getInt("item_amount", 1);
                 int buyPrice = section.getInt("buy.price", -1);
                 int sellPrice = section.getInt("sell.price", -1);
                 String currency = section.getString("currency", "coin");
 
-                items.put(position, new MarketItem(material, amount, buyPrice, sellPrice, currency));
+                // CRITICAL FIX: Load the full ItemStack from metadata to preserve NBT/CrackShot data
+                ItemStack stack = section.getItemStack("metadata");
+                if (stack == null) {
+                    // Fallback for legacy files or manual configs
+                    Material material = Material.matchMaterial(section.getString("material", "STONE"));
+                    int amount = section.getInt("item_amount", 1);
+                    stack = new ItemStack(material != null ? material : Material.STONE, amount);
+                }
+
+                items.put(position, new MarketItem(stack, buyPrice, sellPrice, currency));
             }
             marketCache.put(marketName, items);
             plugin.getLogger().info("Loaded Market: " + marketName + " with " + items.size() + " items.");
@@ -109,7 +119,7 @@ public class MarketProvider implements IMarket {
      * <ol>
      * <li>Checks if the player has inventory space (Sync).</li>
      * <li>Deducts money from the player's account (Async).</li>
-     * <li>If payment succeeds, gives the item to the player (Sync).</li>
+     * <li>If payment succeeds, gives a <b>clone</b> of the specific item to the player (Sync).</li>
      * </ol>
      * </p>
      *
@@ -119,8 +129,8 @@ public class MarketProvider implements IMarket {
      */
     @Override
     public void buy(Player player, String marketName, int slot) {
-        MarketItem item = getItem(marketName, slot);
-        if (item == null || item.buyPrice < 0) return;
+        MarketItem itemData = getItem(marketName, slot);
+        if (itemData == null || itemData.buyPrice < 0) return;
 
         String accountType = "PLAYER"; 
         
@@ -131,13 +141,20 @@ public class MarketProvider implements IMarket {
         }
 
         // 2. Process Payment (Async)
-        MCEconomyProvider.getInstance().minusCoin(player.getUniqueId().toString(), accountType, item.currency, item.buyPrice)
+        MCEconomyProvider.getInstance().minusCoin(player.getUniqueId().toString(), accountType, itemData.currency, itemData.buyPrice)
             .thenAccept(success -> {
                 // 3. Give Item (Back to Sync Main Thread)
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (success) {
-                        player.getInventory().addItem(new ItemStack(item.material, item.amount));
-                        player.sendMessage(ChatColor.GREEN + "Bought " + item.amount + "x " + item.material + " for " + item.buyPrice + " " + item.currency);
+                        // CRITICAL FIX: Give a CLONE of the stored item so they get the exact NBT
+                        player.getInventory().addItem(itemData.itemStack.clone());
+                        
+                        String itemName = itemData.itemStack.hasItemMeta() && itemData.itemStack.getItemMeta().hasDisplayName()
+                            ? itemData.itemStack.getItemMeta().getDisplayName()
+                            : itemData.itemStack.getType().name();
+                            
+                        player.sendMessage(ChatColor.GREEN + "Bought " + itemData.itemStack.getAmount() + "x " + itemName + 
+                            " for " + itemData.buyPrice + " " + itemData.currency);
                     } else {
                         player.sendMessage(ChatColor.RED + "Insufficient funds!");
                     }
@@ -150,7 +167,7 @@ public class MarketProvider implements IMarket {
      * <p>
      * <b>Flow:</b>
      * <ol>
-     * <li>Checks if the player has the required item (Sync).</li>
+     * <li>Checks if the player has the required item (Exact NBT match) (Sync).</li>
      * <li>Removes the item from the player's inventory (Sync).</li>
      * <li>Adds money to the player's account (Async).</li>
      * </ol>
@@ -162,12 +179,15 @@ public class MarketProvider implements IMarket {
      */
     @Override
     public void sell(Player player, String marketName, int slot) {
-        MarketItem item = getItem(marketName, slot);
-        if (item == null || item.sellPrice < 0) return;
+        MarketItem itemData = getItem(marketName, slot);
+        if (itemData == null || itemData.sellPrice < 0) return;
 
         // 1. Check & Remove Item (Sync)
-        ItemStack toRemove = new ItemStack(item.material, item.amount);
-        if (!player.getInventory().containsAtLeast(toRemove, item.amount)) {
+        // We use clone() to ensure we are checking against the authoritative item data
+        ItemStack toRemove = itemData.itemStack.clone();
+        
+        // Checks for item presence including NBT data (except amount logic handled by toRemove.amount)
+        if (!player.getInventory().containsAtLeast(toRemove, toRemove.getAmount())) {
             player.sendMessage(ChatColor.RED + "You don't have enough items to sell!");
             return;
         }
@@ -176,10 +196,10 @@ public class MarketProvider implements IMarket {
 
         // 2. Give Money (Async)
         String accountType = "PLAYER";
-        MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), accountType, item.currency, item.sellPrice)
+        MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), accountType, itemData.currency, itemData.sellPrice)
             .thenAccept(success -> {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    player.sendMessage(ChatColor.GREEN + "Sold for " + item.sellPrice + " " + item.currency);
+                    player.sendMessage(ChatColor.GREEN + "Sold for " + itemData.sellPrice + " " + itemData.currency);
                 });
             });
     }
@@ -198,6 +218,7 @@ public class MarketProvider implements IMarket {
 
     /**
      * Gets a set of all loaded market names.
+     *
      * @return A set of strings representing valid market names.
      */
     public java.util.Set<String> getMarketNames() {
@@ -205,13 +226,12 @@ public class MarketProvider implements IMarket {
     }
 
     /**
-     * A simple data record representing a single item in the market.
+     * A data record representing a single item listing in the market.
      *
-     * @param material  The Bukkit Material of the item.
-     * @param amount    The stack size (amount) of the item.
+     * @param itemStack The full ItemStack (with NBT/Meta) being sold.
      * @param buyPrice  The cost to buy this item (negative if unbuyable).
      * @param sellPrice The reward for selling this item (negative if unsellable).
      * @param currency  The currency type used for the transaction.
      */
-    public record MarketItem(Material material, int amount, int buyPrice, int sellPrice, String currency) {}
+    public record MarketItem(ItemStack itemStack, int buyPrice, int sellPrice, String currency) {}
 }
