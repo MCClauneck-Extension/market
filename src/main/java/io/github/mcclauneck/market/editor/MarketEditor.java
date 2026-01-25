@@ -1,5 +1,6 @@
 package io.github.mcclauneck.market.editor;
 
+import io.github.mcclauneck.market.common.MarketProvider;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -39,6 +40,7 @@ import java.util.*;
 public class MarketEditor implements Listener {
 
     private final JavaPlugin plugin;
+    private final MarketProvider provider; // Added reference to provider
     private final File marketFolder;
 
     // Keys for storing data on the ItemStack itself
@@ -56,10 +58,12 @@ public class MarketEditor implements Listener {
      * Constructs the MarketEditor.
      *
      * @param plugin       The host plugin.
+     * @param provider     The market data provider (for cache refreshing).
      * @param marketFolder The folder containing market YML files.
      */
-    public MarketEditor(JavaPlugin plugin, File marketFolder) {
+    public MarketEditor(JavaPlugin plugin, MarketProvider provider, File marketFolder) {
         this.plugin = plugin;
+        this.provider = provider;
         this.marketFolder = marketFolder;
         this.keyBuy = new NamespacedKey(plugin, "market_buy");
         this.keySell = new NamespacedKey(plugin, "market_sell");
@@ -259,7 +263,11 @@ public class MarketEditor implements Listener {
             config.set(key + ".metadata", saveItem); // Save pure item metadata
         }
 
-        try { config.save(file); } catch (IOException e) { e.printStackTrace(); }
+        try { 
+            config.save(file);
+            // CRITICAL FIX: Reload the provider cache immediately after saving
+            provider.loadMarkets(); 
+        } catch (IOException e) { e.printStackTrace(); }
     }
 
     /**
@@ -296,7 +304,6 @@ public class MarketEditor implements Listener {
         List<String> lore = meta.getLore();
         if (lore != null) {
             // Remove our injected lines (last 7 lines based on updateItemData)
-            // Safety check to ensure we only remove what looks like ours
             if (lore.size() >= 7 && lore.get(lore.size() - 1).contains("Middle Click")) {
                 for (int i = 0; i < 7; i++) {
                     lore.remove(lore.size() - 1);

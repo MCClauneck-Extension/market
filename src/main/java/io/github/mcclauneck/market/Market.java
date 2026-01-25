@@ -68,7 +68,7 @@ public class Market implements IMCExtension {
         // 3. Initialize Provider & Editor
         // We pass 'plugin' because we need to run Sync tasks (Give Item) after Async tasks (Economy)
         this.provider = new MarketProvider(plugin, marketFolder);
-        this.editor = new MarketEditor(plugin, marketFolder);
+        this.editor = new MarketEditor(plugin, this.provider, marketFolder);
 
         // 4. Register Listeners
         plugin.getServer().getPluginManager().registerEvents(new MarketListener(provider), plugin);
