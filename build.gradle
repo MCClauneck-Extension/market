@@ -1,0 +1,92 @@
+/**
+ * Extension Configuration: market
+ */
+plugins {
+    id 'java'
+}
+
+// --- DYNAMIC VERSIONING LOGIC ---
+String buildNum = System.getenv("BUILD_NUMBER")
+String devRelease = System.getenv("DEV_RELEASE_VERSION")
+String releaseTag = System.getenv("RELEASE_VERSION")
+boolean isDevBuild = (buildNum != null && !buildNum.isEmpty())
+boolean isDevReleaseBuild = (devRelease != null && !devRelease.isEmpty())
+
+String calculatedVersion = "unspecified"
+
+if (releaseTag != null && !releaseTag.isEmpty()) {
+    calculatedVersion = releaseTag.replace("v", "")
+} else if (project.hasProperty('project-version')) {
+    def baseVersion = project.property('project-version')
+    def iteration = project.findProperty('project-iteration') ?: "1"
+    
+    if (isDevBuild && !isDevReleaseBuild) {
+        calculatedVersion = "${baseVersion}-${iteration}-${buildNum}-DEV"
+    } else if (isDevReleaseBuild) {
+        calculatedVersion = "${baseVersion}-${iteration}"
+    } else {
+        calculatedVersion = "${baseVersion}-${iteration}-SNAPSHOT"
+    }
+}
+
+version = calculatedVersion
+group = project.property('project-group')
+
+// --- REPOSITORY HELPER ---
+// Reuse this function to point to different repositories within the MCEngine Org
+def mcEngineRepo(String repoName) {
+    return "https://maven.pkg.github.com/MCEngine/${repoName}"
+}
+
+repositories {
+    mavenCentral()
+    
+    // MCEngine Repositories
+    ['mcextension', 'mceconomy'].each { repo ->
+        maven {
+            url = uri(mcEngineRepo(repo))
+            credentials {
+                username = System.getenv("USER_GITHUB_NAME") ?: System.getenv("GITHUB_ACTOR")
+                password = System.getenv("USER_GITHUB_TOKEN") ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+
+    maven {
+        name = 'spigotmc'
+        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+    }
+    maven {
+        name = 'sonatype'
+        url = 'https://oss.sonatype.org/content/groups/public/'
+    }
+}
+
+dependencies {
+    // MCEngine Core Dependencies
+    compileOnly 'io.github.mcengine:mcextension:2026.0.2-7'
+    compileOnly 'io.github.mcengine:mceconomy-common:2026.0.0-3'
+
+    // Spigot API
+    compileOnly 'org.spigotmc:spigot-api:1.21.1-R0.1-SNAPSHOT'
+}
+
+/**
+ * Process resources and replace placeholders with gradle properties.
+ */
+processResources {
+    // Define the properties you want to inject
+    def props = [
+        'project_version': project.version,
+        'project_group': project.group
+    ]
+    
+    // Tell Gradle to track these properties so it knows when to re-run the task
+    inputs.properties(props)
+    filteringCharset 'UTF-8'
+
+    // Target your specific extension file
+    filesMatching('extension.yml') {
+        expand props
+    }
+}
