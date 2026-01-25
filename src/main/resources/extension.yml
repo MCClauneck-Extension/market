@@ -1,0 +1,12 @@
+# The unique identifier for this extension
+name: Market
+
+# The version of this extension
+version: ${project_version}
+
+# The full package path to your main class
+main: ${project_group}.market.Market
+
+# Optional: Ensure MCEconomy is loaded first
+base:
+  depend: [MCEconomy]
