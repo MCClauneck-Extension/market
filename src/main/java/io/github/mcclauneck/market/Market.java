@@ -2,13 +2,16 @@ package io.github.mcclauneck.market;
 
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
+import io.github.mcclauneck.market.editor.MarketEditor;
 import io.github.mcclauneck.market.listener.MarketListener;
 import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
 import io.github.mcengine.mcextension.api.IMCExtension;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -33,6 +36,7 @@ public class Market implements IMCExtension {
      * The provider instance that holds the market logic and cache.
      */
     private MarketProvider provider;
+    private MarketEditor editor;
 
     /**
      * Called when the extension is loaded by the MCEconomy core.
@@ -61,12 +65,14 @@ public class Market implements IMCExtension {
         // 2. Create Example File
         createExampleFile(marketFolder, plugin);
 
-        // 3. Initialize Provider
+        // 3. Initialize Provider & Editor
         // We pass 'plugin' because we need to run Sync tasks (Give Item) after Async tasks (Economy)
         this.provider = new MarketProvider(plugin, marketFolder);
+        this.editor = new MarketEditor(plugin, marketFolder);
 
-        // 4. Register Listener
+        // 4. Register Listeners
         plugin.getServer().getPluginManager().registerEvents(new MarketListener(provider), plugin);
+        plugin.getServer().getPluginManager().registerEvents(editor, plugin);
 
         // 5. Register Command & TabCompleter (Runtime Reflection)
         try {
@@ -78,9 +84,28 @@ public class Market implements IMCExtension {
             MarketTabCompleter marketTabCompleter = new MarketTabCompleter(provider);
 
             // Create a dynamic Command object
-            Command cmd = new Command("market", "Open the market GUI", "/market <name>", Collections.emptyList()) {
+            Command cmd = new Command("market", "Open the market GUI", "/market <name> | /market edit <name>", Collections.emptyList()) {
                 @Override
                 public boolean execute(CommandSender sender, String commandLabel, String[] args) {
+                    // Intercept "edit" subcommand
+                    if (args.length >= 1 && args[0].equalsIgnoreCase("edit")) {
+                        if (!(sender instanceof Player player)) {
+                            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+                            return true;
+                        }
+                        if (!player.hasPermission("market.admin")) {
+                            player.sendMessage(ChatColor.RED + "No permission.");
+                            return true;
+                        }
+                        if (args.length < 2) {
+                            player.sendMessage(ChatColor.RED + "Usage: /market edit <name>");
+                            return true;
+                        }
+                        editor.openEditor(player, args[1]);
+                        return true;
+                    }
+                    
+                    // Fallback to standard open command
                     return marketExecutor.onCommand(sender, this, commandLabel, args);
                 }
 
@@ -114,6 +139,7 @@ public class Market implements IMCExtension {
     public void onDisable(JavaPlugin plugin, Executor executor) {
         // Cleanup if needed
         this.provider = null;
+        this.editor = null;
     }
 
     /**

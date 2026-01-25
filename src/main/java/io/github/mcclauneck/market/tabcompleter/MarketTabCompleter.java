@@ -23,19 +23,25 @@ public class MarketTabCompleter implements TabCompleter {
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        // We only want to complete the first argument (market name)
+        List<String> completions = new ArrayList<>();
+        List<String> markets = new ArrayList<>(provider.getMarketNames());
+
         if (args.length == 1) {
-            List<String> markets = new ArrayList<>(provider.getMarketNames());
-            List<String> completions = new ArrayList<>();
-            
-            // Filter list based on what the user has already typed
-            StringUtil.copyPartialMatches(args[0], markets, completions);
-            
-            // Sort for better UX
-            Collections.sort(completions);
-            return completions;
+            // Suggest market names AND the "edit" keyword
+            List<String> suggestions = new ArrayList<>(markets);
+            if (sender.hasPermission("market.admin")) {
+                suggestions.add("edit");
+            }
+            StringUtil.copyPartialMatches(args[0], suggestions, completions);
+        } 
+        else if (args.length == 2) {
+            // If first arg was "edit", suggest markets again for the second arg
+            if (args[0].equalsIgnoreCase("edit")) {
+                StringUtil.copyPartialMatches(args[1], markets, completions);
+            }
         }
         
-        return Collections.emptyList();
+        Collections.sort(completions);
+        return completions;
     }
 }
