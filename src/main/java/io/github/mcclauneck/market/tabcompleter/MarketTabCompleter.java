@@ -27,15 +27,17 @@ public class MarketTabCompleter implements TabCompleter {
         List<String> markets = new ArrayList<>(provider.getMarketNames());
 
         if (args.length == 1) {
-            // Suggest market names AND the "edit" keyword
+            // Suggest market names AND the admin keywords
             List<String> suggestions = new ArrayList<>(markets);
             if (sender.hasPermission("market.admin")) {
                 suggestions.add("edit");
+                suggestions.add("create");
             }
             StringUtil.copyPartialMatches(args[0], suggestions, completions);
         } 
         else if (args.length == 2) {
-            // If first arg was "edit", suggest markets again for the second arg
+            // If first arg was "edit" or "open", suggest markets again
+            // For "create", we don't suggest existing names (since we are making a new one)
             if (args[0].equalsIgnoreCase("edit")) {
                 StringUtil.copyPartialMatches(args[1], markets, completions);
             }

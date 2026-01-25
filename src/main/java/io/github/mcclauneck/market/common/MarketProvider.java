@@ -11,6 +11,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -54,6 +55,32 @@ public class MarketProvider implements IMarket {
         this.plugin = plugin;
         this.marketFolder = marketFolder;
         loadMarkets();
+    }
+
+    /**
+     * Creates a new empty market file.
+     *
+     * @param name The name of the market to create.
+     * @return true if created successfully, false if it already exists.
+     */
+    public boolean createMarket(String name) {
+        File file = new File(marketFolder, name.toLowerCase() + ".yml");
+        if (file.exists()) return false;
+
+        try {
+            if (file.createNewFile()) {
+                YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+                config.set("name", name + " Market");
+                config.save(file);
+                
+                // Refresh cache so the new market is recognized immediately
+                loadMarkets();
+                return true;
+            }
+        } catch (IOException e) {
+            plugin.getLogger().severe("Failed to create market file: " + e.getMessage());
+        }
+        return false;
     }
 
     /**

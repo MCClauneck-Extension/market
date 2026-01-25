@@ -84,25 +84,54 @@ public class Market implements IMCExtension {
             MarketTabCompleter marketTabCompleter = new MarketTabCompleter(provider);
 
             // Create a dynamic Command object
-            Command cmd = new Command("market", "Open the market GUI", "/market <name> | /market edit <name>", Collections.emptyList()) {
+            Command cmd = new Command("market", "Open the market GUI", "/market <name> | /market create <name> | /market edit <name>", Collections.emptyList()) {
                 @Override
                 public boolean execute(CommandSender sender, String commandLabel, String[] args) {
-                    // Intercept "edit" subcommand
-                    if (args.length >= 1 && args[0].equalsIgnoreCase("edit")) {
-                        if (!(sender instanceof Player player)) {
-                            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+                    
+                    if (args.length >= 1) {
+                        // Handle "create" subcommand
+                        if (args[0].equalsIgnoreCase("create")) {
+                             if (!(sender instanceof Player player)) {
+                                sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+                                return true;
+                            }
+                            if (!player.hasPermission("market.admin")) {
+                                player.sendMessage(ChatColor.RED + "No permission.");
+                                return true;
+                            }
+                            if (args.length < 2) {
+                                player.sendMessage(ChatColor.RED + "Usage: /market create <name>");
+                                return true;
+                            }
+                            
+                            boolean created = provider.createMarket(args[1]);
+                            if (created) {
+                                player.sendMessage(ChatColor.GREEN + "Market '" + args[1] + "' created successfully!");
+                                // Optionally open editor immediately
+                                editor.openEditor(player, args[1]);
+                            } else {
+                                player.sendMessage(ChatColor.RED + "Market '" + args[1] + "' already exists.");
+                            }
                             return true;
                         }
-                        if (!player.hasPermission("market.admin")) {
-                            player.sendMessage(ChatColor.RED + "No permission.");
+
+                        // Handle "edit" subcommand
+                        if (args[0].equalsIgnoreCase("edit")) {
+                            if (!(sender instanceof Player player)) {
+                                sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+                                return true;
+                            }
+                            if (!player.hasPermission("market.admin")) {
+                                player.sendMessage(ChatColor.RED + "No permission.");
+                                return true;
+                            }
+                            if (args.length < 2) {
+                                player.sendMessage(ChatColor.RED + "Usage: /market edit <name>");
+                                return true;
+                            }
+                            editor.openEditor(player, args[1]);
                             return true;
                         }
-                        if (args.length < 2) {
-                            player.sendMessage(ChatColor.RED + "Usage: /market edit <name>");
-                            return true;
-                        }
-                        editor.openEditor(player, args[1]);
-                        return true;
                     }
                     
                     // Fallback to standard open command
