@@ -1,6 +1,7 @@
 package io.github.mcclauneck.market.common;
 
 import io.github.mcclauneck.market.api.IMarket;
+import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import io.github.mcengine.mceconomy.common.MCEconomyProvider;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -111,7 +112,11 @@ public class MarketProvider implements IMarket {
                 int position = section.getInt("position");
                 int buyPrice = section.getInt("buy.price", -1);
                 int sellPrice = section.getInt("sell.price", -1);
-                String currency = section.getString("currency", "coin");
+                
+                // Updated: Convert String currency from YAML to Enum
+                String currencyStr = section.getString("currency", "coin");
+                CurrencyType currency = CurrencyType.fromName(currencyStr);
+                if (currency == null) currency = CurrencyType.COIN; // Default fallback
 
                 // CRITICAL FIX: Load the full ItemStack from metadata to preserve NBT/CrackShot data
                 ItemStack stack = section.getItemStack("metadata");
@@ -168,6 +173,7 @@ public class MarketProvider implements IMarket {
         }
 
         // 2. Process Payment (Async)
+        // Updated: Pass CurrencyType Enum directly to MCEconomyProvider
         MCEconomyProvider.getInstance().minusCoin(player.getUniqueId().toString(), accountType, itemData.currency, itemData.buyPrice)
             .thenAccept(success -> {
                 // 3. Give Item (Back to Sync Main Thread)
@@ -181,7 +187,7 @@ public class MarketProvider implements IMarket {
                             : itemData.itemStack.getType().name();
                             
                         player.sendMessage(ChatColor.GREEN + "Bought " + itemData.itemStack.getAmount() + "x " + itemName + 
-                            " for " + itemData.buyPrice + " " + itemData.currency);
+                            " for " + itemData.buyPrice + " " + itemData.currency.getName());
                     } else {
                         player.sendMessage(ChatColor.RED + "Insufficient funds!");
                     }
@@ -223,10 +229,11 @@ public class MarketProvider implements IMarket {
 
         // 2. Give Money (Async)
         String accountType = "PLAYER";
+        // Updated: Pass CurrencyType Enum directly to MCEconomyProvider
         MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), accountType, itemData.currency, itemData.sellPrice)
             .thenAccept(success -> {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    player.sendMessage(ChatColor.GREEN + "Sold for " + itemData.sellPrice + " " + itemData.currency);
+                    player.sendMessage(ChatColor.GREEN + "Sold for " + itemData.sellPrice + " " + itemData.currency.getName());
                 });
             });
     }
@@ -260,5 +267,5 @@ public class MarketProvider implements IMarket {
      * @param sellPrice The reward for selling this item (negative if unsellable).
      * @param currency  The currency type used for the transaction.
      */
-    public record MarketItem(ItemStack itemStack, int buyPrice, int sellPrice, String currency) {}
+    public record MarketItem(ItemStack itemStack, int buyPrice, int sellPrice, CurrencyType currency) {}
 }

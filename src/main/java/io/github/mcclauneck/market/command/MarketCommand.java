@@ -104,13 +104,15 @@ public class MarketCommand implements CommandExecutor {
                     lore.add(ChatColor.DARK_GRAY + "----------------");
                     
                     if (itemData.buyPrice() >= 0) {
-                        lore.add(ChatColor.GREEN + "Buy: " + itemData.buyPrice() + " " + itemData.currency());
+                        // Updated: Use CurrencyType.getName() for display
+                        lore.add(ChatColor.GREEN + "Buy: " + itemData.buyPrice() + " " + itemData.currency().getName());
                     } else {
                         lore.add(ChatColor.RED + "Buy: N/A");
                     }
                     
                     if (itemData.sellPrice() >= 0) {
-                        lore.add(ChatColor.AQUA + "Sell: " + itemData.sellPrice() + " " + itemData.currency());
+                        // Updated: Use CurrencyType.getName() for display
+                        lore.add(ChatColor.AQUA + "Sell: " + itemData.sellPrice() + " " + itemData.currency().getName());
                     } else {
                         lore.add(ChatColor.RED + "Sell: N/A");
                     }

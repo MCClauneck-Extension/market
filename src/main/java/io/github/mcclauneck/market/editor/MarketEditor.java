@@ -1,6 +1,7 @@
 package io.github.mcclauneck.market.editor;
 
 import io.github.mcclauneck.market.common.MarketProvider;
+import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -57,8 +58,6 @@ public class MarketEditor implements Listener {
     private final Map<UUID, String> editingMarket = new HashMap<>();
     private final Map<UUID, EditAction> pendingChat = new HashMap<>();
 
-    private final List<String> currencies = List.of("coin", "copper", "silver", "gold");
-
     /**
      * Constructs a new MarketEditor.
      *
@@ -109,7 +108,11 @@ public class MarketEditor implements Listener {
 
             int buy = section.getInt("buy.price", -1);
             int sell = section.getInt("sell.price", -1);
-            String currency = section.getString("currency", "coin");
+            
+            // Updated: Convert String from config to Enum
+            String curStr = section.getString("currency", "coin");
+            CurrencyType currency = CurrencyType.fromName(curStr);
+            if (currency == null) currency = CurrencyType.COIN;
 
             // Apply Data & Lore for the editor view
             updateItemData(item, buy, sell, currency);
@@ -164,14 +167,17 @@ public class MarketEditor implements Listener {
             if (meta == null) return;
             PersistentDataContainer container = meta.getPersistentDataContainer();
             
-            String currentCurrency = container.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+            String currentStr = container.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+            CurrencyType current = CurrencyType.fromName(currentStr);
+            if (current == null) current = CurrencyType.COIN;
+            
             int buy = container.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
             int sell = container.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
 
-            // Cycle logic
-            int index = currencies.indexOf(currentCurrency);
-            int nextIndex = (index + 1) % currencies.size();
-            String nextCurrency = currencies.get(nextIndex);
+            // Cycle logic using Enum
+            CurrencyType[] values = CurrencyType.values();
+            int nextIndex = (current.ordinal() + 1) % values.length;
+            CurrencyType nextCurrency = values[nextIndex];
 
             // Apply Update
             updateItemData(item, buy, sell, nextCurrency);
@@ -211,7 +217,10 @@ public class MarketEditor implements Listener {
                         
                         int buy = pdc.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
                         int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
-                        String cur = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+                        String curStr = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+                        
+                        CurrencyType cur = CurrencyType.fromName(curStr);
+                        if (cur == null) cur = CurrencyType.COIN;
 
                         if (action.type.equals("BUY")) buy = price;
                         if (action.type.equals("SELL")) sell = price;
@@ -274,7 +283,7 @@ public class MarketEditor implements Listener {
 
             int buy = pdc.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
             int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
-            String currency = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+            String currencyName = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
 
             // Clone item for saving to keep it pure (remove editor artifacts)
             ItemStack saveItem = item.clone();
@@ -286,7 +295,7 @@ public class MarketEditor implements Listener {
             config.set(key + ".item_amount", saveItem.getAmount());
             config.set(key + ".buy.price", buy);
             config.set(key + ".sell.price", sell);
-            config.set(key + ".currency", currency);
+            config.set(key + ".currency", currencyName); // Save the string name of the enum
             config.set(key + ".metadata", saveItem); // Save pure item metadata
         }
 
@@ -309,14 +318,14 @@ public class MarketEditor implements Listener {
      * @param sell     The sell price.
      * @param currency The currency type.
      */
-    private void updateItemData(ItemStack item, int buy, int sell, String currency) {
+    private void updateItemData(ItemStack item, int buy, int sell, CurrencyType currency) {
         ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
         // 1. Save Raw Data
         pdc.set(keyBuy, PersistentDataType.INTEGER, buy);
         pdc.set(keySell, PersistentDataType.INTEGER, sell);
-        pdc.set(keyCurrency, PersistentDataType.STRING, currency);
+        pdc.set(keyCurrency, PersistentDataType.STRING, currency.getName());
 
         // 2. Prepare Lore
         List<String> lore = meta.hasLore() ? meta.getLore() : new ArrayList<>();
@@ -328,7 +337,7 @@ public class MarketEditor implements Listener {
         lore.add(ChatColor.DARK_GRAY + "----------------");
         lore.add(ChatColor.GREEN + "Buy: " + (buy >= 0 ? buy : "N/A"));
         lore.add(ChatColor.AQUA + "Sell: " + (sell >= 0 ? sell : "N/A"));
-        lore.add(ChatColor.GOLD + "Currency: " + currency);
+        lore.add(ChatColor.GOLD + "Currency: " + currency.getName());
         lore.add(ChatColor.DARK_GRAY + "----------------");
         lore.add(ChatColor.YELLOW + "Shift+L: Set Buy | Shift+R: Set Sell");
         lore.add(ChatColor.YELLOW + "Middle Click: Cycle Currency");
