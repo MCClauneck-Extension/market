@@ -27,7 +27,7 @@ import java.util.concurrent.Executor;
  * <p>
  * This class implements {@link IMCExtension}, allowing it to be loaded dynamically
  * by the MCEconomy core plugin. It is responsible for setting up the data folder,
- * initializing the logic provider, and registering event listeners.
+ * initializing the logic provider, and registering event listeners and commands.
  * </p>
  */
 public class Market implements IMCExtension {
@@ -36,6 +36,10 @@ public class Market implements IMCExtension {
      * The provider instance that holds the market logic and cache.
      */
     private MarketProvider provider;
+    
+    /**
+     * The editor instance for managing admin GUIs.
+     */
     private MarketEditor editor;
 
     /**
@@ -45,9 +49,9 @@ public class Market implements IMCExtension {
      * <ol>
      * <li>Ensures the extension data directory exists.</li>
      * <li>Creates the example 'ore.yml' file if it doesn't exist.</li>
-     * <li>Initializes the {@link MarketProvider} with the plugin instance and data folder.</li>
+     * <li>Initializes the {@link MarketProvider} and {@link MarketEditor}.</li>
      * <li>Registers the {@link MarketListener} with Bukkit's PluginManager.</li>
-     * <li>Registers the {@link MarketCommand} and {@link MarketTabCompleter} via Reflection.</li>
+     * <li>Registers the {@link MarketCommand} and {@link MarketTabCompleter} via Reflection to handle subcommands like 'create' and 'edit'.</li>
      * </ol>
      * </p>
      *
@@ -70,8 +74,10 @@ public class Market implements IMCExtension {
         this.provider = new MarketProvider(plugin, marketFolder);
         this.editor = new MarketEditor(plugin, this.provider, marketFolder);
 
+        MarketCommand marketExecutor = new MarketCommand(provider);
+
         // 4. Register Listeners
-        plugin.getServer().getPluginManager().registerEvents(new MarketListener(provider), plugin);
+        plugin.getServer().getPluginManager().registerEvents(new MarketListener(provider, marketExecutor), plugin);
         plugin.getServer().getPluginManager().registerEvents(editor, plugin);
 
         // 5. Register Command & TabCompleter (Runtime Reflection)
@@ -80,11 +86,10 @@ public class Market implements IMCExtension {
             commandMapField.setAccessible(true);
             CommandMap commandMap = (CommandMap) commandMapField.get(Bukkit.getServer());
 
-            MarketCommand marketExecutor = new MarketCommand(provider);
             MarketTabCompleter marketTabCompleter = new MarketTabCompleter(provider);
 
-            // Create a dynamic Command object
-            Command cmd = new Command("market", "Open the market GUI", "/market <name> | /market create <name> | /market edit <name>", Collections.emptyList()) {
+            // Create a dynamic Command object that intercepts 'create' and 'edit' subcommands
+            Command cmd = new Command("market", "Open the market GUI", "/market <name> [page] | /market create <name> | /market edit <name>", Collections.emptyList()) {
                 @Override
                 public boolean execute(CommandSender sender, String commandLabel, String[] args) {
                     
@@ -107,7 +112,6 @@ public class Market implements IMCExtension {
                             boolean created = provider.createMarket(args[1]);
                             if (created) {
                                 player.sendMessage(ChatColor.GREEN + "Market '" + args[1] + "' created successfully!");
-                                // Optionally open editor immediately
                                 editor.openEditor(player, args[1]);
                             } else {
                                 player.sendMessage(ChatColor.RED + "Market '" + args[1] + "' already exists.");
@@ -126,10 +130,14 @@ public class Market implements IMCExtension {
                                 return true;
                             }
                             if (args.length < 2) {
-                                player.sendMessage(ChatColor.RED + "Usage: /market edit <name>");
+                                player.sendMessage(ChatColor.RED + "Usage: /market edit <name> [page]");
                                 return true;
                             }
-                            editor.openEditor(player, args[1]);
+                            int page = 1;
+                            if (args.length >= 3) {
+                                try { page = Integer.parseInt(args[2]); } catch (NumberFormatException ignored) {}
+                            }
+                            editor.openEditor(player, args[1], page);
                             return true;
                         }
                     }
@@ -166,7 +174,6 @@ public class Market implements IMCExtension {
      */
     @Override
     public void onDisable(JavaPlugin plugin, Executor executor) {
-        // Cleanup if needed
         this.provider = null;
         this.editor = null;
     }
@@ -175,7 +182,7 @@ public class Market implements IMCExtension {
      * Generates a default 'ore.yml' file if no markets exist.
      * <p>
      * This provides a template for server administrators to understand how to configure
-     * new markets.
+     * new markets, demonstrating the new 'items' list structure.
      * </p>
      *
      * @param marketFolder The directory to save the file in.
@@ -188,33 +195,29 @@ public class Market implements IMCExtension {
         try (FileWriter writer = new FileWriter(oreFile)) {
             String content = """
                     name: Ore Market
-                    # Item Key (Can be any unique number or string)
-                    1:
-                      # GUI Slot (0 - 53)
-                      position: 0
-                      # Valid Bukkit Material Name
-                      material: IRON_ORE
-                      # Stack size
-                      item_amount: 1
-                      buy:
-                        # Price to buy from server (Set -1 to disable buying)
-                        price: 50
-                      sell:
-                        # Price to sell to server (Set -1 to disable selling)
-                        price: 10
-                      # Currency ID defined in MCEconomy
-                      currency: coin
-                    
-                    # Example 2: Block of Iron (Bulk)
-                    2:
-                      position: 1
-                      material: IRON_BLOCK
-                      item_amount: 1
-                      buy:
-                        price: 450
-                      sell:
-                        price: 90
-                      currency: coin
+                    items:
+                      '1':
+                        buy:
+                          price: 50
+                        sell:
+                          price: 10
+                        currency: coin
+                        amount: 1
+                        metadata:
+                          ==: org.bukkit.inventory.ItemStack
+                          v: 3465
+                          type: IRON_ORE
+                      '2':
+                        buy:
+                          price: 450
+                        sell:
+                          price: 90
+                        currency: coin
+                        amount: 1
+                        metadata:
+                          ==: org.bukkit.inventory.ItemStack
+                          v: 3465
+                          type: IRON_BLOCK
                     """;
             writer.write(content);
             plugin.getLogger().info("Created example market file: ore.yml");

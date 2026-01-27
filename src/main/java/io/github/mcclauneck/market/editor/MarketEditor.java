@@ -1,6 +1,7 @@
 package io.github.mcclauneck.market.editor;
 
 import io.github.mcclauneck.market.common.MarketProvider;
+import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -23,25 +24,18 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.*;
 
 /**
- * Handles the in-game editor for Market listings.
+ * Manages the in-game GUI for editing market listings.
  * <p>
- * This class allows admins to visually edit market items, prices, and currencies
- * without modifying YAML files manually. It supports preserving item metadata
- * (enchants, NBT, custom lore) while editing.
- * </p>
- * <p>
- * <b>Interactions:</b>
+ * This class handles:
  * <ul>
- * <li><b>Drag/Drop:</b> Add items to the market.</li>
- * <li><b>Shift + Left Click:</b> Set Buy Price (via Chat).</li>
- * <li><b>Shift + Right Click:</b> Set Sell Price (via Chat).</li>
- * <li><b>Middle Click (Scroll):</b> Cycle through available currencies.</li>
+ * <li>Opening a paginated GUI for specific markets.</li>
+ * <li>Handling interactions to edit prices and currencies.</li>
+ * <li>Saving items placed in the GUI to the market's YAML config via {@link EditorUtil}.</li>
+ * <li>Capturing chat input for numeric values.</li>
  * </ul>
- * </p>
  */
 public class MarketEditor implements Listener {
 
@@ -55,8 +49,10 @@ public class MarketEditor implements Listener {
     private final NamespacedKey keyCurrency;
 
     // Session tracking
-    private final Map<UUID, String> editingMarket = new HashMap<>();
+    private final Map<UUID, EditorSession> activeSessions = new HashMap<>();
     private final Map<UUID, EditAction> pendingChat = new HashMap<>();
+    // Tracks players switching pages to prevent InventoryCloseEvent from killing the session
+    private final Set<UUID> isSwitchingPages = new HashSet<>();
 
     /**
      * Constructs a new MarketEditor.
@@ -75,58 +71,94 @@ public class MarketEditor implements Listener {
     }
 
     /**
-     * Opens the editor GUI for a specific market.
+     * Opens the editor GUI for a specific market (Default Page 1).
+     *
+     * @param player     The admin player opening the editor.
+     * @param marketName The name of the market file (without extension).
+     */
+    public void openEditor(Player player, String marketName) {
+        openEditor(player, marketName, 1);
+    }
+
+    /**
+     * Opens the editor GUI for a specific market and page.
      * <p>
      * Loads items from the YAML file, applies editor metadata (prices/currency) onto
      * the items, and displays them in a 54-slot inventory.
      * </p>
      *
      * @param player     The admin player opening the editor.
-     * @param marketName The name of the market file (without extension).
+     * @param marketName The name of the market file.
+     * @param page       The page number to open.
      */
-    public void openEditor(Player player, String marketName) {
+    public void openEditor(Player player, String marketName, int page) {
         File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-        Inventory gui = Bukkit.createInventory(null, 54, "Edit Market: " + marketName);
+        Inventory gui = Bukkit.createInventory(null, 54, "Edit Market: " + marketName + " | P" + page);
 
-        for (String key : config.getKeys(false)) {
-            if (key.equals("name")) continue; // Skip metadata
-            ConfigurationSection section = config.getConfigurationSection(key);
-            if (section == null) continue;
-
-            int slot = section.getInt("position");
-            if (slot < 0 || slot >= 54) continue;
-
-            ItemStack item = section.getItemStack("metadata");
-            // Fallback if metadata isn't fully saved, reconstruct from parts
-            if (item == null) {
-                String matName = section.getString("material", "STONE");
-                Material mat = Material.matchMaterial(matName);
-                if (mat == null) mat = Material.STONE;
-                item = new ItemStack(mat, section.getInt("item_amount", 1));
+        ConfigurationSection itemsSection = config.getConfigurationSection("items");
+        int maxKey = 0;
+        if (itemsSection != null) {
+            for (String k : itemsSection.getKeys(false)) {
+                try {
+                    int keyVal = Integer.parseInt(k);
+                    if (keyVal > maxKey) maxKey = keyVal;
+                } catch (NumberFormatException ignored) {}
             }
-
-            int buy = section.getInt("buy.price", -1);
-            int sell = section.getInt("sell.price", -1);
-            
-            // Updated: Convert String from config to Enum
-            String curStr = section.getString("currency", "coin");
-            CurrencyType currency = CurrencyType.fromName(curStr);
-            if (currency == null) currency = CurrencyType.COIN;
-
-            // Apply Data & Lore for the editor view
-            updateItemData(item, buy, sell, currency);
-            gui.setItem(slot, item);
         }
 
-        editingMarket.put(player.getUniqueId(), marketName);
+        int itemsPerPage = 45;
+        int startKey = (page - 1) * itemsPerPage + 1;
+
+        for (int i = 0; i < itemsPerPage; i++) {
+            int currentKey = startKey + i;
+            if (itemsSection != null && itemsSection.contains(String.valueOf(currentKey))) {
+                ConfigurationSection section = itemsSection.getConfigurationSection(String.valueOf(currentKey));
+                if (section == null) continue;
+
+                ItemStack item = section.getItemStack("metadata");
+                if (item == null) {
+                    item = new ItemStack(Material.STONE);
+                }
+                item.setAmount(section.getInt("amount", item.getAmount()));
+
+                int buy = section.getInt("buy.price", -1);
+                int sell = section.getInt("sell.price", -1);
+                String curStr = section.getString("currency", "coin");
+                CurrencyType currency = CurrencyType.fromName(curStr);
+                if (currency == null) currency = CurrencyType.COIN;
+
+                EditorUtil.updateItemData(item, buy, sell, currency, keyBuy, keySell, keyCurrency);
+                gui.setItem(i, item);
+            }
+        }
+
+        // Controls Area (Bottom Row)
+        ItemStack glass = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta gMeta = glass.getItemMeta();
+        gMeta.setDisplayName(" ");
+        glass.setItemMeta(gMeta);
+        for (int i = 45; i < 54; i++) gui.setItem(i, glass);
+
+        if (page > 1) {
+            gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", "Previous Page"));
+        }
+        boolean pageFull = (gui.getItem(44) != null);
+        if (maxKey > (page * itemsPerPage) || pageFull) {
+            gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", "Next Page"));
+        }
+        
+        gui.setItem(49, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTc0MjgxZjk2NjlmMmNkY2Y3ODQ4NDQ4YTViYjYyODIzMmVlYTJiZmJkZmM3ZDRmMjBiZGE1MDMzZDAzMzY2YSJ9fX0=", "Save & Reload"));
+
+        activeSessions.put(player.getUniqueId(), new EditorSession(marketName, page));
         player.openInventory(gui);
     }
 
     /**
      * Handles clicks within the editor GUI.
      * <p>
-     * Detects shift-clicks for price editing and middle-clicks for currency cycling.
+     * Detects shift-clicks for price editing, middle-clicks for currency cycling,
+     * and clicks on pagination buttons.
      * </p>
      *
      * @param event The inventory click event.
@@ -134,54 +166,72 @@ public class MarketEditor implements Listener {
     @EventHandler
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
-        if (!editingMarket.containsKey(player.getUniqueId())) return;
+        if (!activeSessions.containsKey(player.getUniqueId())) return;
         if (!event.getView().getTitle().startsWith("Edit Market:")) return;
+
+        EditorSession session = activeSessions.get(player.getUniqueId());
+
+        // Block interaction with control bar
+        if (event.getRawSlot() >= 45 && event.getRawSlot() <= 53) {
+            event.setCancelled(true);
+            
+            if (event.getClickedInventory() != event.getView().getTopInventory()) return;
+
+            int targetPage = session.page;
+            boolean shouldSwitch = false;
+
+            if (event.getSlot() == 45 && event.getCurrentItem().getType() == Material.PLAYER_HEAD) {
+                targetPage--;
+                shouldSwitch = true;
+            } else if (event.getSlot() == 53 && event.getCurrentItem().getType() == Material.PLAYER_HEAD) {
+                targetPage++;
+                shouldSwitch = true;
+            } else if (event.getSlot() == 49) {
+                // Save & Reload button
+                shouldSwitch = true; // Reload same page
+            }
+
+            if (shouldSwitch) {
+                EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getView().getTopInventory(), keyBuy, keySell, keyCurrency);
+                provider.loadMarkets(); // Refresh cache
+                
+                isSwitchingPages.add(player.getUniqueId());
+                player.closeInventory();
+                int finalPage = targetPage;
+                Bukkit.getScheduler().runTask(plugin, () -> openEditor(player, session.marketName, finalPage));
+            }
+            return;
+        }
 
         ItemStack item = event.getCurrentItem();
         if (item == null || item.getType() == Material.AIR) return;
-
-        // Ensure user is clicking top inventory for edit actions
         if (event.getClickedInventory() != event.getView().getTopInventory()) return;
 
-        // Shift + Left: Edit Buy
-        if (event.isShiftClick() && event.isLeftClick()) {
+        if (event.isShiftClick()) {
             event.setCancelled(true);
-            saveMarket(player, event.getInventory()); // Save current state
-            pendingChat.put(player.getUniqueId(), new EditAction(event.getSlot(), "BUY"));
-            player.closeInventory();
-            player.sendMessage(ChatColor.GREEN + "Enter BUY price in chat (-1 to disable):");
-        }
-        // Shift + Right: Edit Sell
-        else if (event.isShiftClick() && event.isRightClick()) {
-            event.setCancelled(true);
-            saveMarket(player, event.getInventory()); // Save current state
-            pendingChat.put(player.getUniqueId(), new EditAction(event.getSlot(), "SELL"));
-            player.closeInventory();
-            player.sendMessage(ChatColor.GREEN + "Enter SELL price in chat (-1 to disable):");
-        }
-        // Middle Click (Scroll): Cycle Currency
-        else if (event.getClick() == ClickType.MIDDLE) {
-            event.setCancelled(true);
+            String type = event.isLeftClick() ? "BUY" : (event.isRightClick() ? "SELL" : null);
             
+            if (type != null) {
+                EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
+                pendingChat.put(player.getUniqueId(), new EditAction(event.getSlot(), type));
+                player.closeInventory();
+                player.sendMessage(ChatColor.GREEN + "Enter " + type + " price in chat (-1 to disable):");
+            }
+        } else if (event.getClick() == ClickType.MIDDLE) {
+            event.setCancelled(true);
             ItemMeta meta = item.getItemMeta();
-            if (meta == null) return;
-            PersistentDataContainer container = meta.getPersistentDataContainer();
-            
-            String currentStr = container.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
-            CurrencyType current = CurrencyType.fromName(currentStr);
+            PersistentDataContainer pdc = meta.getPersistentDataContainer();
+            String curStr = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+            CurrencyType current = CurrencyType.fromName(curStr);
             if (current == null) current = CurrencyType.COIN;
             
-            int buy = container.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
-            int sell = container.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
-
-            // Cycle logic using Enum
-            CurrencyType[] values = CurrencyType.values();
-            int nextIndex = (current.ordinal() + 1) % values.length;
-            CurrencyType nextCurrency = values[nextIndex];
-
-            // Apply Update
-            updateItemData(item, buy, sell, nextCurrency);
-            player.playSound(player.getLocation(), org.bukkit.Sound.UI_BUTTON_CLICK, 1f, 1f);
+            CurrencyType[] vals = CurrencyType.values();
+            CurrencyType next = vals[(current.ordinal() + 1) % vals.length];
+            
+            int buy = pdc.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
+            int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
+            
+            EditorUtil.updateItemData(item, buy, sell, next, keyBuy, keySell, keyCurrency);
         }
     }
 
@@ -189,208 +239,70 @@ public class MarketEditor implements Listener {
      * Handles chat input for price editing.
      * <p>
      * Captures the number typed by the player, updates the item in the GUI,
-     * and re-saves the market.
+     * and re-saves the market page.
      * </p>
      *
      * @param event The chat event.
      */
     @EventHandler
     public void onChat(AsyncPlayerChatEvent event) {
-        if (pendingChat.containsKey(event.getPlayer().getUniqueId())) {
+        UUID uuid = event.getPlayer().getUniqueId();
+        if (pendingChat.containsKey(uuid)) {
             event.setCancelled(true);
-            Player player = event.getPlayer();
-            EditAction action = pendingChat.remove(player.getUniqueId());
-            String marketName = editingMarket.get(player.getUniqueId());
-
+            EditAction action = pendingChat.remove(uuid);
+            EditorSession session = activeSessions.get(uuid);
+            
             try {
                 int price = Integer.parseInt(event.getMessage());
-
-                // We need to re-open the GUI, modify the item, and save.
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    openEditor(player, marketName);
-                    Inventory top = player.getOpenInventory().getTopInventory();
-                    ItemStack item = top.getItem(action.slot);
-
-                    if (item != null) {
-                        ItemMeta meta = item.getItemMeta();
-                        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-                        
-                        int buy = pdc.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
-                        int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
-                        String curStr = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
-                        
-                        CurrencyType cur = CurrencyType.fromName(curStr);
-                        if (cur == null) cur = CurrencyType.COIN;
-
-                        if (action.type.equals("BUY")) buy = price;
-                        if (action.type.equals("SELL")) sell = price;
-
-                        updateItemData(item, buy, sell, cur);
-                        // Save triggers automatically on close/re-open or we can force save
-                        saveMarket(player, top);
-                    }
+                   openEditor(event.getPlayer(), session.marketName, session.page);
+                   Inventory inv = event.getPlayer().getOpenInventory().getTopInventory();
+                   ItemStack item = inv.getItem(action.slot);
+                   if (item != null) {
+                       ItemMeta meta = item.getItemMeta();
+                       PersistentDataContainer pdc = meta.getPersistentDataContainer();
+                       int buy = pdc.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
+                       int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
+                       String curStr = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
+                       CurrencyType cur = CurrencyType.fromName(curStr);
+                       if (cur == null) cur = CurrencyType.COIN;
+                       
+                       if (action.type.equals("BUY")) buy = price;
+                       if (action.type.equals("SELL")) sell = price;
+                       
+                       EditorUtil.updateItemData(item, buy, sell, cur, keyBuy, keySell, keyCurrency);
+                       EditorUtil.savePage(marketFolder, session.marketName, session.page, inv, keyBuy, keySell, keyCurrency);
+                       provider.loadMarkets(); // Refresh
+                   }
                 });
-
             } catch (NumberFormatException e) {
-                player.sendMessage(ChatColor.RED + "Invalid number.");
-                Bukkit.getScheduler().runTask(plugin, () -> openEditor(player, marketName));
+                event.getPlayer().sendMessage(ChatColor.RED + "Invalid number.");
+                Bukkit.getScheduler().runTask(plugin, () -> openEditor(event.getPlayer(), session.marketName, session.page));
             }
         }
     }
 
     /**
-     * Saves the market configuration when the inventory is closed.
+     * Saves the market page when the inventory is closed.
      *
      * @param event The inventory close event.
      */
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        if (event.getPlayer() instanceof Player player && editingMarket.containsKey(player.getUniqueId())) {
-            if (!pendingChat.containsKey(player.getUniqueId())) {
-                saveMarket(player, event.getInventory());
-                editingMarket.remove(player.getUniqueId());
-                player.sendMessage(ChatColor.GREEN + "Market saved.");
+        if (event.getPlayer() instanceof Player player) {
+            if (isSwitchingPages.contains(player.getUniqueId())) {
+                isSwitchingPages.remove(player.getUniqueId());
+                return;
+            }
+            if (activeSessions.containsKey(player.getUniqueId()) && !pendingChat.containsKey(player.getUniqueId())) {
+                EditorSession session = activeSessions.remove(player.getUniqueId());
+                EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
+                provider.loadMarkets();
+                player.sendMessage(ChatColor.GREEN + "Market saved!");
             }
         }
     }
 
-    /**
-     * Writes the current inventory state to the YAML file.
-     * <p>
-     * Cleans up editor-specific data (lore, PDC keys) before saving to ensure
-     * the item on disk is the "pure" version (e.g., usable in-game).
-     * </p>
-     *
-     * @param player The player performing the save.
-     * @param inv    The inventory to save.
-     */
-    private void saveMarket(Player player, Inventory inv) {
-        String marketName = editingMarket.get(player.getUniqueId());
-        File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-
-        // Clear existing items to prevent duplicates/ghosts
-        for (String key : config.getKeys(false)) {
-            if (!key.equals("name")) config.set(key, null);
-        }
-
-        for (int i = 0; i < 54; i++) {
-            ItemStack item = inv.getItem(i);
-            if (item == null || item.getType() == Material.AIR) continue;
-
-            ItemMeta meta = item.getItemMeta();
-            PersistentDataContainer pdc = meta.getPersistentDataContainer();
-
-            int buy = pdc.getOrDefault(keyBuy, PersistentDataType.INTEGER, -1);
-            int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
-            String currencyName = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
-
-            // Clone item for saving to keep it pure (remove editor artifacts)
-            ItemStack saveItem = item.clone();
-            cleanItemForSave(saveItem);
-
-            String key = String.valueOf(i + 1);
-            config.set(key + ".position", i);
-            config.set(key + ".material", saveItem.getType().name());
-            config.set(key + ".item_amount", saveItem.getAmount());
-            config.set(key + ".buy.price", buy);
-            config.set(key + ".sell.price", sell);
-            config.set(key + ".currency", currencyName); // Save the string name of the enum
-            config.set(key + ".metadata", saveItem); // Save pure item metadata
-        }
-
-        try { 
-            config.save(file);
-            // CRITICAL: Reload the provider cache immediately after saving so changes apply instantly
-            provider.loadMarkets(); 
-        } catch (IOException e) { e.printStackTrace(); }
-    }
-
-    /**
-     * Updates an ItemStack with new price data and refreshes the Lore.
-     * <p>
-     * This method preserves existing item lore (e.g., from CrackShot or RPG plugins)
-     * and appends the editor instructions at the bottom.
-     * </p>
-     *
-     * @param item     The item to update.
-     * @param buy      The buy price.
-     * @param sell     The sell price.
-     * @param currency The currency type.
-     */
-    private void updateItemData(ItemStack item, int buy, int sell, CurrencyType currency) {
-        ItemMeta meta = item.getItemMeta();
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-
-        // 1. Save Raw Data
-        pdc.set(keyBuy, PersistentDataType.INTEGER, buy);
-        pdc.set(keySell, PersistentDataType.INTEGER, sell);
-        pdc.set(keyCurrency, PersistentDataType.STRING, currency.getName());
-
-        // 2. Prepare Lore
-        List<String> lore = meta.hasLore() ? meta.getLore() : new ArrayList<>();
-        
-        // Remove old editor lines if present (to avoid stacking instructions)
-        removeEditorLore(lore);
-
-        // Append Editor Lines
-        lore.add(ChatColor.DARK_GRAY + "----------------");
-        lore.add(ChatColor.GREEN + "Buy: " + (buy >= 0 ? buy : "N/A"));
-        lore.add(ChatColor.AQUA + "Sell: " + (sell >= 0 ? sell : "N/A"));
-        lore.add(ChatColor.GOLD + "Currency: " + currency.getName());
-        lore.add(ChatColor.DARK_GRAY + "----------------");
-        lore.add(ChatColor.YELLOW + "Shift+L: Set Buy | Shift+R: Set Sell");
-        lore.add(ChatColor.YELLOW + "Middle Click: Cycle Currency");
-        
-        meta.setLore(lore);
-        item.setItemMeta(meta);
-    }
-
-    /**
-     * Cleans the item of all Editor traces (Lore + PDC) for pure saving.
-     * <p>
-     * Removes the editor-specific lore lines and the persistent data keys
-     * used for temporary storage in the GUI.
-     * </p>
-     *
-     * @param item The item to clean.
-     */
-    private void cleanItemForSave(ItemStack item) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
-
-        // 1. Remove Editor Lore
-        if (meta.hasLore()) {
-            List<String> lore = meta.getLore();
-            removeEditorLore(lore);
-            meta.setLore(lore);
-        }
-
-        // 2. Remove Editor Keys (PDC) so they don't stick to the item in YAML
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        pdc.remove(keyBuy);
-        pdc.remove(keySell);
-        pdc.remove(keyCurrency);
-
-        item.setItemMeta(meta);
-    }
-
-    /**
-     * Helper to strip the last 7 lines if they match the editor format.
-     *
-     * @param lore The lore list to modify.
-     */
-    private void removeEditorLore(List<String> lore) {
-        // Safety check: ensure we only remove lines if the last line matches our known footer
-        if (lore.size() >= 7 && lore.get(lore.size() - 1).contains("Middle Click")) {
-            for (int i = 0; i < 7; i++) {
-                lore.remove(lore.size() - 1);
-            }
-        }
-    }
-
-    /**
-     * Simple record to store pending edit actions.
-     */
+    private record EditorSession(String marketName, int page) {}
     private record EditAction(int slot, String type) {}
 }

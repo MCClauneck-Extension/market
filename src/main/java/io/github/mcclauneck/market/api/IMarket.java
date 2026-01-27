@@ -11,17 +11,19 @@ public interface IMarket {
      * Initiates a buy transaction for a player.
      *
      * @param player     The player attempting to buy.
-     * @param marketName The name of the market file (e.g., "ore").
-     * @param slot       The GUI slot index where the item is located.
+     * @param marketName The name of the market file.
+     * @param page       The current page number (starts at 1).
+     * @param slot       The GUI slot index (0-44).
      */
-    void buy(Player player, String marketName, int slot);
+    void buy(Player player, String marketName, int page, int slot);
 
     /**
      * Initiates a sell transaction for a player.
      *
      * @param player     The player attempting to sell.
-     * @param marketName The name of the market file (e.g., "ore").
-     * @param slot       The GUI slot index where the item is located.
+     * @param marketName The name of the market file.
+     * @param page       The current page number (starts at 1).
+     * @param slot       The GUI slot index (0-44).
      */
-    void sell(Player player, String marketName, int slot);
+    void sell(Player player, String marketName, int page, int slot);
 }
