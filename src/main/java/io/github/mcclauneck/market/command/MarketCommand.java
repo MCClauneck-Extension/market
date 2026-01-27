@@ -1,8 +1,10 @@
 package io.github.mcclauneck.market.command;
 
 import io.github.mcclauneck.market.common.MarketProvider;
+import io.github.mcclauneck.market.editor.util.EditorUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -20,7 +22,7 @@ import java.util.Map;
  * <p>
  * Commands:
  * <ul>
- * <li>/market [name] - Opens the specified market GUI.</li>
+ * <li>/market [name] [page] - Opens the specified market GUI at the given page.</li>
  * </ul>
  * </p>
  */
@@ -52,17 +54,25 @@ public class MarketCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "This command can only be used by players.");
+            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
             return true;
         }
 
-        // Note: The "edit" subcommand logic is intercepted in Market.java
+        // Note: The "edit" and "create" subcommand logic is intercepted in Market.java
         if (args.length == 0) {
-            player.sendMessage(ChatColor.RED + "Usage: /market <name>");
+            player.sendMessage(ChatColor.RED + "Usage: /market <name> [page]");
             return true;
         }
 
         String marketName = args[0];
+        int page = 1;
+        if (args.length >= 2) {
+            try {
+                page = Integer.parseInt(args[1]);
+            } catch (NumberFormatException ignored) {}
+        }
+        if (page < 1) page = 1;
+
         Map<Integer, MarketProvider.MarketItem> items = provider.getMarketItems(marketName);
 
         if (items == null) {
@@ -70,7 +80,7 @@ public class MarketCommand implements CommandExecutor {
             return true;
         }
 
-        openMarketGui(player, marketName, items);
+        openMarketGui(player, marketName, items, page);
         return true;
     }
 
@@ -78,23 +88,35 @@ public class MarketCommand implements CommandExecutor {
      * Creates and opens the market inventory GUI for the player.
      * <p>
      * This method clones the items from the provider and appends pricing information
-     * to the lore for display purposes. This ensures the player sees the price
-     * but receives the clean item upon purchase.
+     * to the lore for display purposes. It also calculates and renders pagination controls.
      * </p>
      *
      * @param player     The player to open the GUI for.
      * @param marketName The name of the market (used in the title).
      * @param items      The map of items to populate the GUI with.
+     * @param page       The current page number.
      */
-    private void openMarketGui(Player player, String marketName, Map<Integer, MarketProvider.MarketItem> items) {
+    public void openMarketGui(Player player, String marketName, Map<Integer, MarketProvider.MarketItem> items, int page) {
         // Create inventory with 54 slots (Double Chest size)
-        // Title format must match what MarketListener expects ("Market: " + name)
-        Inventory gui = Bukkit.createInventory(null, 54, "Market: " + marketName);
+        // Title format must match what MarketListener expects ("Market: " + name + " | P" + page)
+        Inventory gui = Bukkit.createInventory(null, 54, "Market: " + marketName + " | P" + page);
 
-        items.forEach((slot, itemData) -> {
-            if (slot >= 0 && slot < 54) {
-                // CRITICAL FIX: Clone the stored item so we don't modify the cache or the item given to player
-                ItemStack displayItem = itemData.itemStack().clone();
+        int itemsPerPage = 45;
+        int startKey = (page - 1) * itemsPerPage + 1;
+
+        // Calculate Max Key to determine if a "Next Page" button is needed
+        int maxKey = 0;
+        for (int k : items.keySet()) {
+            if (k > maxKey) maxKey = k;
+        }
+
+        for (int i = 0; i < itemsPerPage; i++) {
+            int currentKey = startKey + i;
+            MarketProvider.MarketItem data = items.get(currentKey);
+
+            if (data != null) {
+                // CRITICAL: Clone the stored item so we don't modify the cache or the item given to player
+                ItemStack displayItem = data.itemStack().clone();
                 ItemMeta meta = displayItem.getItemMeta();
                 
                 if (meta != null) {
@@ -103,16 +125,14 @@ public class MarketCommand implements CommandExecutor {
                     
                     lore.add(ChatColor.DARK_GRAY + "----------------");
                     
-                    if (itemData.buyPrice() >= 0) {
-                        // Updated: Use CurrencyType.getName() for display
-                        lore.add(ChatColor.GREEN + "Buy: " + itemData.buyPrice() + " " + itemData.currency().getName());
+                    if (data.buyPrice() >= 0) {
+                        lore.add(ChatColor.GREEN + "Buy: " + data.buyPrice() + " " + data.currency().getName());
                     } else {
                         lore.add(ChatColor.RED + "Buy: N/A");
                     }
-                    
-                    if (itemData.sellPrice() >= 0) {
-                        // Updated: Use CurrencyType.getName() for display
-                        lore.add(ChatColor.AQUA + "Sell: " + itemData.sellPrice() + " " + itemData.currency().getName());
+
+                    if (data.sellPrice() >= 0) {
+                        lore.add(ChatColor.AQUA + "Sell: " + data.sellPrice() + " " + data.currency().getName());
                     } else {
                         lore.add(ChatColor.RED + "Sell: N/A");
                     }
@@ -123,9 +143,27 @@ public class MarketCommand implements CommandExecutor {
                     displayItem.setItemMeta(meta);
                 }
                 
-                gui.setItem(slot, displayItem);
+                gui.setItem(i, displayItem);
             }
-        });
+        }
+
+        // GUI Glass Filler for Bottom Row
+        ItemStack glass = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta gMeta = glass.getItemMeta();
+        gMeta.setDisplayName(" ");
+        glass.setItemMeta(gMeta);
+
+        for (int i = 45; i < 54; i++) gui.setItem(i, glass);
+
+        // Navigation Buttons
+        if (page > 1) {
+            gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", "Previous Page"));
+        }
+        
+        boolean pageFull = (gui.getItem(44) != null);
+        if (maxKey > (page * itemsPerPage) || pageFull) {
+             gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", "Next Page"));
+        }
 
         player.openInventory(gui);
     }

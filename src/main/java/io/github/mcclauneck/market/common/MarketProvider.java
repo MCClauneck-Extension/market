@@ -15,14 +15,14 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * The core logic implementation for the Market extension.
  * <p>
  * This class handles the loading of market configurations from YAML files,
- * manages the in-memory cache of market items, and executes the transactional
- * logic for buying and selling items safely using the Async/Sync pattern.
+ * manages the in-memory cache of market items with support for pagination,
+ * and executes the transactional logic for buying and selling items safely
+ * using the Async/Sync pattern.
  * </p>
  */
 public class MarketProvider implements IMarket {
@@ -41,7 +41,7 @@ public class MarketProvider implements IMarket {
      * In-memory cache of loaded markets.
      * <p>
      * Key: The market name (filename without extension).<br>
-     * Value: A map of Slot Index -> MarketItem data.
+     * Value: A map of Absolute Index -> MarketItem data.
      * </p>
      */
     private final Map<String, Map<Integer, MarketItem>> marketCache = new HashMap<>();
@@ -56,6 +56,15 @@ public class MarketProvider implements IMarket {
         this.plugin = plugin;
         this.marketFolder = marketFolder;
         loadMarkets();
+    }
+
+    /**
+     * Gets the folder containing market configuration files.
+     *
+     * @return The market data folder.
+     */
+    public File getMarketFolder() {
+        return this.marketFolder;
     }
 
     /**
@@ -79,7 +88,7 @@ public class MarketProvider implements IMarket {
                 return true;
             }
         } catch (IOException e) {
-            plugin.getLogger().severe("Failed to create market file: " + e.getMessage());
+            e.printStackTrace();
         }
         return false;
     }
@@ -87,8 +96,8 @@ public class MarketProvider implements IMarket {
     /**
      * Loads (or reloads) all .yml configuration files from the Market folder into memory.
      * <p>
-     * This method iterates through files in {@link #marketFolder}, parses item data
-     * (including full ItemStack metadata), and populates the {@link #marketCache}.
+     * This method parses the new YAML structure (items list) and populates the cache.
+     * It handles full ItemStack metadata restoration.
      * </p>
      */
     public void loadMarkets() {
@@ -103,34 +112,35 @@ public class MarketProvider implements IMarket {
             YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
             Map<Integer, MarketItem> items = new HashMap<>();
 
-            for (String key : config.getKeys(false)) {
-                if (key.equals("name")) continue; // Skip the display name key
+            ConfigurationSection itemsSection = config.getConfigurationSection("items");
+            if (itemsSection != null) {
+                for (String keyStr : itemsSection.getKeys(false)) {
+                    try {
+                        int key = Integer.parseInt(keyStr); // Absolute Index (1..N)
+                        ConfigurationSection itemSection = itemsSection.getConfigurationSection(keyStr);
+                        if (itemSection == null) continue;
 
-                ConfigurationSection section = config.getConfigurationSection(key);
-                if (section == null) continue;
+                        int buyPrice = itemSection.getInt("buy.price", -1);
+                        int sellPrice = itemSection.getInt("sell.price", -1);
+                        
+                        String currencyStr = itemSection.getString("currency", "coin");
+                        CurrencyType currency = CurrencyType.fromName(currencyStr);
+                        if (currency == null) currency = CurrencyType.COIN;
 
-                int position = section.getInt("position");
-                int buyPrice = section.getInt("buy.price", -1);
-                int sellPrice = section.getInt("sell.price", -1);
-                
-                // Updated: Convert String currency from YAML to Enum
-                String currencyStr = section.getString("currency", "coin");
-                CurrencyType currency = CurrencyType.fromName(currencyStr);
-                if (currency == null) currency = CurrencyType.COIN; // Default fallback
+                        ItemStack stack = itemSection.getItemStack("metadata");
+                        if (stack == null) {
+                            stack = new ItemStack(Material.STONE);
+                        }
+                        
+                        // Explicit amount override if saved separately
+                        int amount = itemSection.getInt("amount", stack.getAmount());
+                        stack.setAmount(amount);
 
-                // CRITICAL FIX: Load the full ItemStack from metadata to preserve NBT/CrackShot data
-                ItemStack stack = section.getItemStack("metadata");
-                if (stack == null) {
-                    // Fallback for legacy files or manual configs
-                    Material material = Material.matchMaterial(section.getString("material", "STONE"));
-                    int amount = section.getInt("item_amount", 1);
-                    stack = new ItemStack(material != null ? material : Material.STONE, amount);
+                        items.put(key, new MarketItem(stack, buyPrice, sellPrice, currency));
+                    } catch (NumberFormatException ignored) {}
                 }
-
-                items.put(position, new MarketItem(stack, buyPrice, sellPrice, currency));
             }
             marketCache.put(marketName, items);
-            plugin.getLogger().info("Loaded Market: " + marketName + " with " + items.size() + " items.");
         }
     }
 
@@ -138,7 +148,7 @@ public class MarketProvider implements IMarket {
      * Retrieves the map of items for a specific market.
      *
      * @param marketName The identifier of the market.
-     * @return A Map where Key is the GUI slot and Value is the MarketItem, or null if not found.
+     * @return A Map where Key is the absolute item index and Value is the MarketItem.
      */
     public Map<Integer, MarketItem> getMarketItems(String marketName) {
         return marketCache.get(marketName);
@@ -149,6 +159,7 @@ public class MarketProvider implements IMarket {
      * <p>
      * <b>Flow:</b>
      * <ol>
+     * <li>Calculates absolute index from page and slot.</li>
      * <li>Checks if the player has inventory space (Sync).</li>
      * <li>Deducts money from the player's account (Async).</li>
      * <li>If payment succeeds, gives a <b>clone</b> of the specific item to the player (Sync).</li>
@@ -157,15 +168,17 @@ public class MarketProvider implements IMarket {
      *
      * @param player     The player attempting to buy.
      * @param marketName The name of the market.
-     * @param slot       The slot index clicked in the GUI.
+     * @param page       The current page number.
+     * @param slot       The slot index clicked in the GUI (0-44).
      */
     @Override
-    public void buy(Player player, String marketName, int slot) {
-        MarketItem itemData = getItem(marketName, slot);
+    public void buy(Player player, String marketName, int page, int slot) {
+        // Calculate absolute index: (Page-1)*45 + Slot(0-44) + 1
+        int absoluteIndex = (page - 1) * 45 + slot + 1;
+        
+        MarketItem itemData = getItem(marketName, absoluteIndex);
         if (itemData == null || itemData.buyPrice < 0) return;
 
-        String accountType = "PLAYER"; 
-        
         // 1. Check Inventory Space (Sync)
         if (player.getInventory().firstEmpty() == -1) {
             player.sendMessage(ChatColor.RED + "Inventory full!");
@@ -173,13 +186,11 @@ public class MarketProvider implements IMarket {
         }
 
         // 2. Process Payment (Async)
-        // Updated: Pass CurrencyType Enum directly to MCEconomyProvider
-        MCEconomyProvider.getInstance().minusCoin(player.getUniqueId().toString(), accountType, itemData.currency, itemData.buyPrice)
+        MCEconomyProvider.getInstance().minusCoin(player.getUniqueId().toString(), "PLAYER", itemData.currency, itemData.buyPrice)
             .thenAccept(success -> {
                 // 3. Give Item (Back to Sync Main Thread)
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (success) {
-                        // CRITICAL FIX: Give a CLONE of the stored item so they get the exact NBT
                         player.getInventory().addItem(itemData.itemStack.clone());
                         
                         String itemName = itemData.itemStack.hasItemMeta() && itemData.itemStack.getItemMeta().hasDisplayName()
@@ -208,18 +219,18 @@ public class MarketProvider implements IMarket {
      *
      * @param player     The player attempting to sell.
      * @param marketName The name of the market.
-     * @param slot       The slot index clicked in the GUI.
+     * @param page       The current page number.
+     * @param slot       The slot index clicked in the GUI (0-44).
      */
     @Override
-    public void sell(Player player, String marketName, int slot) {
-        MarketItem itemData = getItem(marketName, slot);
+    public void sell(Player player, String marketName, int page, int slot) {
+        int absoluteIndex = (page - 1) * 45 + slot + 1;
+
+        MarketItem itemData = getItem(marketName, absoluteIndex);
         if (itemData == null || itemData.sellPrice < 0) return;
 
         // 1. Check & Remove Item (Sync)
-        // We use clone() to ensure we are checking against the authoritative item data
         ItemStack toRemove = itemData.itemStack.clone();
-        
-        // Checks for item presence including NBT data (except amount logic handled by toRemove.amount)
         if (!player.getInventory().containsAtLeast(toRemove, toRemove.getAmount())) {
             player.sendMessage(ChatColor.RED + "You don't have enough items to sell!");
             return;
@@ -228,9 +239,7 @@ public class MarketProvider implements IMarket {
         player.getInventory().removeItem(toRemove);
 
         // 2. Give Money (Async)
-        String accountType = "PLAYER";
-        // Updated: Pass CurrencyType Enum directly to MCEconomyProvider
-        MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), accountType, itemData.currency, itemData.sellPrice)
+        MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), "PLAYER", itemData.currency, itemData.sellPrice)
             .thenAccept(success -> {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     player.sendMessage(ChatColor.GREEN + "Sold for " + itemData.sellPrice + " " + itemData.currency.getName());
@@ -242,12 +251,12 @@ public class MarketProvider implements IMarket {
      * Helper method to retrieve a specific item from the cache.
      *
      * @param marketName The market identifier.
-     * @param slot       The slot index.
+     * @param key        The absolute item index.
      * @return The MarketItem object, or null if invalid.
      */
-    private MarketItem getItem(String marketName, int slot) {
+    private MarketItem getItem(String marketName, int key) {
         if (!marketCache.containsKey(marketName)) return null;
-        return marketCache.get(marketName).get(slot);
+        return marketCache.get(marketName).get(key);
     }
 
     /**
