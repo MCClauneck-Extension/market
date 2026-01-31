@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The core logic implementation for the Market extension.
@@ -43,8 +44,11 @@ public class MarketProvider implements IMarket {
      * Key: The market name (filename without extension).<br>
      * Value: A map of Absolute Index -> MarketItem data.
      * </p>
+     * <p>
+     * Changed to ConcurrentHashMap to support async reloads from the Editor.
+     * </p>
      */
-    private final Map<String, Map<Integer, MarketItem>> marketCache = new HashMap<>();
+    private final Map<String, Map<Integer, MarketItem>> marketCache = new ConcurrentHashMap<>();
 
     /**
      * Constructs a new MarketProvider.
@@ -84,7 +88,7 @@ public class MarketProvider implements IMarket {
                 config.save(file);
                 
                 // Refresh cache so the new market is recognized immediately
-                loadMarkets();
+                reloadMarket(name);
                 return true;
             }
         } catch (IOException e) {
@@ -109,39 +113,57 @@ public class MarketProvider implements IMarket {
 
         for (File file : files) {
             String marketName = file.getName().replace(".yml", "");
-            YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-            Map<Integer, MarketItem> items = new HashMap<>();
-
-            ConfigurationSection itemsSection = config.getConfigurationSection("items");
-            if (itemsSection != null) {
-                for (String keyStr : itemsSection.getKeys(false)) {
-                    try {
-                        int key = Integer.parseInt(keyStr); // Absolute Index (1..N)
-                        ConfigurationSection itemSection = itemsSection.getConfigurationSection(keyStr);
-                        if (itemSection == null) continue;
-
-                        int buyPrice = itemSection.getInt("buy.price", -1);
-                        int sellPrice = itemSection.getInt("sell.price", -1);
-                        
-                        String currencyStr = itemSection.getString("currency", "coin");
-                        CurrencyType currency = CurrencyType.fromName(currencyStr);
-                        if (currency == null) currency = CurrencyType.COIN;
-
-                        ItemStack stack = itemSection.getItemStack("metadata");
-                        if (stack == null) {
-                            stack = new ItemStack(Material.STONE);
-                        }
-                        
-                        // Explicit amount override if saved separately
-                        int amount = itemSection.getInt("amount", stack.getAmount());
-                        stack.setAmount(amount);
-
-                        items.put(key, new MarketItem(stack, buyPrice, sellPrice, currency));
-                    } catch (NumberFormatException ignored) {}
-                }
-            }
-            marketCache.put(marketName, items);
+            reloadMarket(marketName);
         }
+    }
+
+    /**
+     * Reloads a specific market from disk.
+     * <p>
+     * This method is thread-safe and can be called asynchronously after editing.
+     * </p>
+     *
+     * @param marketName The name of the market to reload.
+     */
+    public void reloadMarket(String marketName) {
+        File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
+        if (!file.exists()) {
+            marketCache.remove(marketName);
+            return;
+        }
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+        Map<Integer, MarketItem> items = new HashMap<>();
+
+        ConfigurationSection itemsSection = config.getConfigurationSection("items");
+        if (itemsSection != null) {
+            for (String keyStr : itemsSection.getKeys(false)) {
+                try {
+                    int key = Integer.parseInt(keyStr); // Absolute Index (1..N)
+                    ConfigurationSection itemSection = itemsSection.getConfigurationSection(keyStr);
+                    if (itemSection == null) continue;
+
+                    int buyPrice = itemSection.getInt("buy.price", -1);
+                    int sellPrice = itemSection.getInt("sell.price", -1);
+                    
+                    String currencyStr = itemSection.getString("currency", "coin");
+                    CurrencyType currency = CurrencyType.fromName(currencyStr);
+                    if (currency == null) currency = CurrencyType.COIN;
+
+                    ItemStack stack = itemSection.getItemStack("metadata");
+                    if (stack == null) {
+                        stack = new ItemStack(Material.STONE);
+                    }
+                    
+                    // Explicit amount override if saved separately
+                    int amount = itemSection.getInt("amount", stack.getAmount());
+                    stack.setAmount(amount);
+
+                    items.put(key, new MarketItem(stack, buyPrice, sellPrice, currency));
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        marketCache.put(marketName, items);
     }
 
     /**

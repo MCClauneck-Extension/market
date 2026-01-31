@@ -92,19 +92,20 @@ public class EditorUtil {
     /**
      * Saves the current editor page to the YAML file using numerical keys.
      * <p>
-     * This method iterates over the first 45 slots of the inventory, cleans any editor-specific
+     * This method iterates over the provided array of ItemStacks, cleans any editor-specific
      * data (Lore, PersistentDataContainer keys), and saves the "pure" item to disk.
+     * This method is safe to call asynchronously provided the ItemStack array was snapshot on the main thread.
      * </p>
      *
      * @param marketFolder The directory containing market files.
      * @param marketName   The name of the market.
      * @param page         The current page number.
-     * @param inv          The inventory to save.
+     * @param contents     The snapshot of items to save (0-53).
      * @param keyBuy       The PDC key for buy price.
      * @param keySell      The PDC key for sell price.
      * @param keyCurrency  The PDC key for currency type.
      */
-    public static void savePage(File marketFolder, String marketName, int page, Inventory inv, NamespacedKey keyBuy, NamespacedKey keySell, NamespacedKey keyCurrency) {
+    public static void savePage(File marketFolder, String marketName, int page, ItemStack[] contents, NamespacedKey keyBuy, NamespacedKey keySell, NamespacedKey keyCurrency) {
         File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
 
@@ -112,7 +113,10 @@ public class EditorUtil {
         int startIndex = (page - 1) * itemsPerPage;
 
         for (int i = 0; i < itemsPerPage; i++) {
-            ItemStack item = inv.getItem(i);
+            // Safety check for array bounds (though inventory is usually 54)
+            if (i >= contents.length) break;
+
+            ItemStack item = contents[i];
             int key = startIndex + i + 1; // 1-based indexing for YAML keys
 
             if (item != null && item.getType() != Material.AIR) {

@@ -25,6 +25,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.Executor;
 
 /**
  * Manages the in-game GUI for editing market listings.
@@ -42,6 +43,7 @@ public class MarketEditor implements Listener {
     private final JavaPlugin plugin;
     private final MarketProvider provider;
     private final File marketFolder;
+    private final Executor executor;
 
     // Keys for storing data on the ItemStack itself
     private final NamespacedKey keyBuy;
@@ -60,11 +62,13 @@ public class MarketEditor implements Listener {
      * @param plugin       The host plugin instance.
      * @param provider     The market data provider (used for cache invalidation).
      * @param marketFolder The folder containing market configuration files.
+     * @param executor     The async executor for file saving.
      */
-    public MarketEditor(JavaPlugin plugin, MarketProvider provider, File marketFolder) {
+    public MarketEditor(JavaPlugin plugin, MarketProvider provider, File marketFolder, Executor executor) {
         this.plugin = plugin;
         this.provider = provider;
         this.marketFolder = marketFolder;
+        this.executor = executor;
         this.keyBuy = new NamespacedKey(plugin, "market_buy");
         this.keySell = new NamespacedKey(plugin, "market_sell");
         this.keyCurrency = new NamespacedKey(plugin, "market_currency");
@@ -92,6 +96,11 @@ public class MarketEditor implements Listener {
      * @param page       The page number to open.
      */
     public void openEditor(Player player, String marketName, int page) {
+        // Optimization: We could use provider cache here, but to ensure admin sees latest disk state,
+        // we can keep reading file OR use cache. Since opening editor is rare, reading file is acceptable,
+        // but let's stick to the current implementation for safety, or we could use provider.getMarketItems()
+        // and reconstruct the editor view. For now, sticking to direct file load to ensure "what is on disk is shown".
+        // The major lag comes from WRITING, not reading a small file once.
         File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
         Inventory gui = Bukkit.createInventory(null, 54, "Edit Market: " + marketName + " | P" + page);
@@ -192,8 +201,14 @@ public class MarketEditor implements Listener {
             }
 
             if (shouldSwitch) {
-                EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getView().getTopInventory(), keyBuy, keySell, keyCurrency);
-                provider.loadMarkets(); // Refresh cache
+                // Snapshot the inventory contents on the Main Thread
+                ItemStack[] contents = event.getView().getTopInventory().getContents();
+                
+                // Perform save async
+                executor.execute(() -> {
+                    EditorUtil.savePage(marketFolder, session.marketName, session.page, contents, keyBuy, keySell, keyCurrency);
+                    provider.reloadMarket(session.marketName);
+                });
                 
                 isSwitchingPages.add(player.getUniqueId());
                 player.closeInventory();
@@ -212,7 +227,13 @@ public class MarketEditor implements Listener {
             String type = event.isLeftClick() ? "BUY" : (event.isRightClick() ? "SELL" : null);
             
             if (type != null) {
-                EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
+                // Snapshot contents before closing for chat input
+                ItemStack[] contents = event.getInventory().getContents();
+                executor.execute(() -> {
+                    EditorUtil.savePage(marketFolder, session.marketName, session.page, contents, keyBuy, keySell, keyCurrency);
+                    // No need to reload cache yet, we are about to edit more
+                });
+
                 pendingChat.put(player.getUniqueId(), new EditAction(event.getSlot(), type));
                 player.closeInventory();
                 player.sendMessage(ChatColor.GREEN + "Enter " + type + " price in chat (-1 to disable):");
@@ -254,6 +275,7 @@ public class MarketEditor implements Listener {
             
             try {
                 int price = Integer.parseInt(event.getMessage());
+                // Must run on main thread to interact with Bukkit API
                 Bukkit.getScheduler().runTask(plugin, () -> {
                    openEditor(event.getPlayer(), session.marketName, session.page);
                    Inventory inv = event.getPlayer().getOpenInventory().getTopInventory();
@@ -271,8 +293,13 @@ public class MarketEditor implements Listener {
                        if (action.type.equals("SELL")) sell = price;
                        
                        EditorUtil.updateItemData(item, buy, sell, cur, keyBuy, keySell, keyCurrency);
-                       EditorUtil.savePage(marketFolder, session.marketName, session.page, inv, keyBuy, keySell, keyCurrency);
-                       provider.loadMarkets(); // Refresh
+                       
+                       // Snapshot and Save Async
+                       ItemStack[] contents = inv.getContents();
+                       executor.execute(() -> {
+                           EditorUtil.savePage(marketFolder, session.marketName, session.page, contents, keyBuy, keySell, keyCurrency);
+                           provider.reloadMarket(session.marketName);
+                       });
                    }
                 });
             } catch (NumberFormatException e) {
@@ -296,9 +323,16 @@ public class MarketEditor implements Listener {
             }
             if (activeSessions.containsKey(player.getUniqueId()) && !pendingChat.containsKey(player.getUniqueId())) {
                 EditorSession session = activeSessions.remove(player.getUniqueId());
-                EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
-                provider.loadMarkets();
-                player.sendMessage(ChatColor.GREEN + "Market saved!");
+                
+                // Snapshot contents (Sync)
+                ItemStack[] contents = event.getInventory().getContents();
+                
+                // Save and Reload (Async)
+                executor.execute(() -> {
+                    EditorUtil.savePage(marketFolder, session.marketName, session.page, contents, keyBuy, keySell, keyCurrency);
+                    provider.reloadMarket(session.marketName);
+                    player.sendMessage(ChatColor.GREEN + "Market saved!");
+                });
             }
         }
     }
