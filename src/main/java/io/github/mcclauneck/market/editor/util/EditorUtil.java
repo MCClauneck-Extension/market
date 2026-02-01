@@ -14,13 +14,12 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
-import org.bukkit.util.io.BukkitObjectOutputStream;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -217,14 +216,9 @@ public class EditorUtil {
     }
 
     private static String itemStackToBase64(ItemStack item) {
-        try {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream);
-            dataOutput.writeObject(item);
-            dataOutput.close();
-            return Base64.getEncoder().encodeToString(outputStream.toByteArray());
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to save item stack", e);
-        }
+        YamlConfiguration tempConfig = new YamlConfiguration();
+        tempConfig.set("i", item);
+        String yamlString = tempConfig.saveToString();
+        return Base64.getEncoder().encodeToString(yamlString.getBytes(StandardCharsets.UTF_8));
     }
 }

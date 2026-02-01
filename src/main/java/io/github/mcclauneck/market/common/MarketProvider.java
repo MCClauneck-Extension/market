@@ -6,15 +6,15 @@ import io.github.mcengine.mceconomy.common.MCEconomyProvider;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.util.io.BukkitObjectInputStream;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -288,15 +288,16 @@ public class MarketProvider implements IMarket {
 
     private ItemStack itemStackFromBase64(String data) {
         try {
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64.getDecoder().decode(data));
-            BukkitObjectInputStream dataInput = new BukkitObjectInputStream(inputStream);
-            ItemStack item = (ItemStack) dataInput.readObject();
-            dataInput.close();
-            return item;
-        } catch (Exception e) {
-            // Catch ClassCastException, ClassNotFoundException, and IOException
-            // Log the error but do not crash the server loop
-            plugin.getLogger().warning("Failed to deserialize market item (possibly corrupted Base64 or incompatible version): " + e.getMessage());
+            // Decode Base64 -> YAML String
+            String yamlString = new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8);
+            
+            // Load YAML -> ItemStack
+            YamlConfiguration tempConfig = new YamlConfiguration();
+            tempConfig.loadFromString(yamlString);
+            
+            return tempConfig.getItemStack("i");
+        } catch (IllegalArgumentException | InvalidConfigurationException e) {
+            plugin.getLogger().warning("Failed to deserialize market item: " + e.getMessage());
             return null;
         }
     }

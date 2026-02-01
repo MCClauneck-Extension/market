@@ -16,12 +16,11 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.util.io.BukkitObjectOutputStream;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -71,7 +70,7 @@ public class Market implements IMCExtension {
             marketFolder.mkdirs();
         }
 
-        // 2. Create Example File (Dynamically generated to ensure Base64 compatibility)
+        // 2. Create Example File
         createExampleFile(marketFolder, plugin);
 
         // 3. Initialize Provider & Editor
@@ -186,8 +185,7 @@ public class Market implements IMCExtension {
     /**
      * Generates a default 'ore.yml' file if no markets exist.
      * <p>
-     * This method now programmatically serializes the default items to ensure the Base64 strings
-     * are perfectly compatible with the running server version, avoiding deserialization crashes.
+     * Uses the YAML-to-Base64 method to ensure the example file is compatible.
      * </p>
      *
      * @param marketFolder The directory to save the file in.
@@ -203,7 +201,7 @@ public class Market implements IMCExtension {
 
             // Item 1: Iron Ore
             ItemStack ironOre = new ItemStack(Material.IRON_ORE);
-            String b64Ore = generateBase64(ironOre);
+            String b64Ore = itemStackToBase64(ironOre);
             
             config.set("items.1.buy.price", 50);
             config.set("items.1.sell.price", 10);
@@ -213,7 +211,7 @@ public class Market implements IMCExtension {
 
             // Item 2: Iron Block
             ItemStack ironBlock = new ItemStack(Material.IRON_BLOCK);
-            String b64Block = generateBase64(ironBlock);
+            String b64Block = itemStackToBase64(ironBlock);
 
             config.set("items.2.buy.price", 450);
             config.set("items.2.sell.price", 90);
@@ -228,19 +226,10 @@ public class Market implements IMCExtension {
         }
     }
 
-    /**
-     * Helper to generate Base64 for the example file locally.
-     */
-    private String generateBase64(ItemStack item) {
-        try {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream);
-            dataOutput.writeObject(item);
-            dataOutput.close();
-            return Base64.getEncoder().encodeToString(outputStream.toByteArray());
-        } catch (IOException e) {
-            e.printStackTrace();
-            return "";
-        }
+    private String itemStackToBase64(ItemStack item) {
+        YamlConfiguration tempConfig = new YamlConfiguration();
+        tempConfig.set("i", item);
+        String yamlString = tempConfig.saveToString();
+        return Base64.getEncoder().encodeToString(yamlString.getBytes(StandardCharsets.UTF_8));
     }
 }
