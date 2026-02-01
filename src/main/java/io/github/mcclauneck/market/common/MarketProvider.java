@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
 
 /**
  * The core logic implementation for the Market extension.
@@ -132,12 +133,15 @@ public class MarketProvider implements IMarket {
 
                         ItemStack stack = null;
                         String base64 = itemSection.getString("metadata");
-                        if (base64 != null) {
+                        if (base64 != null && !base64.isEmpty()) {
                             stack = itemStackFromBase64(base64);
                         }
 
+                        // Fallback to STONE if loading fails to prevent null-pointer errors later,
+                        // but log it so the admin knows something is wrong.
                         if (stack == null) {
                             stack = new ItemStack(Material.STONE);
+                            plugin.getLogger().warning("Market '" + marketName + "' item #" + key + " failed to load metadata. Defaulting to STONE.");
                         }
                         
                         // Explicit amount override if saved separately
@@ -297,7 +301,7 @@ public class MarketProvider implements IMarket {
             
             return tempConfig.getItemStack("i");
         } catch (IllegalArgumentException | InvalidConfigurationException e) {
-            plugin.getLogger().warning("Failed to deserialize market item: " + e.getMessage());
+            plugin.getLogger().log(Level.WARNING, "Failed to deserialize market item: " + e.getMessage());
             return null;
         }
     }

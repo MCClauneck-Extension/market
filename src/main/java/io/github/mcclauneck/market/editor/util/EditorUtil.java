@@ -124,8 +124,9 @@ public class EditorUtil {
                 int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
                 String currency = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
 
-                // Clean item for saving (Remove editor artifacts)
-                ItemStack toSave = item.clone();
+                // CRITICAL FIX: Create a FRESH ItemStack to strip CraftItemStack wrapper artifacts
+                // that can cause serialization to fail (resulting in STONE upon reload).
+                ItemStack toSave = new ItemStack(item);
                 cleanItemForSave(toSave, keyBuy, keySell, keyCurrency);
 
                 config.set("items." + key + ".metadata", itemStackToBase64(toSave));
