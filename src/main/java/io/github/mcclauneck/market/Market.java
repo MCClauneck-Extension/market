@@ -8,16 +8,21 @@ import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
 import io.github.mcengine.mcextension.api.IMCExtension;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.io.BukkitObjectOutputStream;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -66,7 +71,7 @@ public class Market implements IMCExtension {
             marketFolder.mkdirs();
         }
 
-        // 2. Create Example File
+        // 2. Create Example File (Dynamically generated to ensure Base64 compatibility)
         createExampleFile(marketFolder, plugin);
 
         // 3. Initialize Provider & Editor
@@ -181,8 +186,8 @@ public class Market implements IMCExtension {
     /**
      * Generates a default 'ore.yml' file if no markets exist.
      * <p>
-     * This provides a template for server administrators to understand how to configure
-     * new markets, demonstrating the new 'items' list structure.
+     * This method now programmatically serializes the default items to ensure the Base64 strings
+     * are perfectly compatible with the running server version, avoiding deserialization crashes.
      * </p>
      *
      * @param marketFolder The directory to save the file in.
@@ -192,31 +197,50 @@ public class Market implements IMCExtension {
         File oreFile = new File(marketFolder, "ore.yml");
         if (oreFile.exists()) return;
 
-        try (FileWriter writer = new FileWriter(oreFile)) {
-            String content = """
-                    name: Ore Market
-                    items:
-                      '1':
-                        buy:
-                          price: 50
-                        sell:
-                          price: 10
-                        currency: coin
-                        amount: 1
-                        metadata: 'rO0ABXNyABpvcmcuYnVra2l0LnV0aWwuaW8uV3JhcHBlcvJQR+zxEm8FAgABTAADbWFwdAAPTGphdmEvdXRpbC9NYXA7eHBzcgA1Y29tLmdvb2dsZS5jb21tb24uY29sbGVjdC5JbW11dGFibGVNYXAkU2VyaWFsaXplZEZvcm0AAAAAAAAAAAIAAkwABGtleXN0ABJMamF2YS9sYW5nL09iamVjdDtMAAZ2YWx1ZXNxAH4ABHhwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAnQAAj09dAABdnVxAH4ACAAAAAJ0ABdvcmcuYnVra2l0LmludmVudG9yeS5JdGVtU3RhY2tzcgARamF2YS5sYW5nLkludGVnZXIS4qCk94GHOAIAAUkABXZhbHVleHIAEGphdmEubGFuZy5OdW1iZXKGrJUdC5TgiwIAAHhwAAADYXQACElST05fT1JF'
-                      '2':
-                        buy:
-                          price: 450
-                        sell:
-                          price: 90
-                        currency: coin
-                        amount: 1
-                        metadata: 'rO0ABXNyABpvcmcuYnVra2l0LnV0aWwuaW8uV3JhcHBlcvJQR+zxEm8FAgABTAADbWFwdAAPTGphdmEvdXRpbC9NYXA7eHBzcgA1Y29tLmdvb2dsZS5jb21tb24uY29sbGVjdC5JbW11dGFibGVNYXAkU2VyaWFsaXplZEZvcm0AAAAAAAAAAAIAAkwABGtleXN0ABJMamF2YS9sYW5nL09iamVjdDtMAAZ2YWx1ZXNxAH4ABHhwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAnQAAj09dAABdnVxAH4ACAAAAAJ0ABdvcmcuYnVra2l0LmludmVudG9yeS5JdGVtU3RhY2tzcgARamF2YS5sYW5nLkludGVnZXIS4qCk94GHOAIAAUkABXZhbHVleHIAEGphdmEubGFuZy5OdW1iZXKGrJUdC5TgiwIAAHhwAAADYXQACklST05fQkxPQ0s='
-                    """;
-            writer.write(content);
+        try {
+            YamlConfiguration config = new YamlConfiguration();
+            config.set("name", "Ore Market");
+
+            // Item 1: Iron Ore
+            ItemStack ironOre = new ItemStack(Material.IRON_ORE);
+            String b64Ore = generateBase64(ironOre);
+            
+            config.set("items.1.buy.price", 50);
+            config.set("items.1.sell.price", 10);
+            config.set("items.1.currency", "coin");
+            config.set("items.1.amount", 1);
+            config.set("items.1.metadata", b64Ore);
+
+            // Item 2: Iron Block
+            ItemStack ironBlock = new ItemStack(Material.IRON_BLOCK);
+            String b64Block = generateBase64(ironBlock);
+
+            config.set("items.2.buy.price", 450);
+            config.set("items.2.sell.price", 90);
+            config.set("items.2.currency", "coin");
+            config.set("items.2.amount", 1);
+            config.set("items.2.metadata", b64Block);
+
+            config.save(oreFile);
             plugin.getLogger().info("Created example market file: ore.yml");
         } catch (IOException e) {
             plugin.getLogger().severe("Failed to create example market file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Helper to generate Base64 for the example file locally.
+     */
+    private String generateBase64(ItemStack item) {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream);
+            dataOutput.writeObject(item);
+            dataOutput.close();
+            return Base64.getEncoder().encodeToString(outputStream.toByteArray());
+        } catch (IOException e) {
+            e.printStackTrace();
+            return "";
         }
     }
 }

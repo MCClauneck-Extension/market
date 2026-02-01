@@ -293,8 +293,10 @@ public class MarketProvider implements IMarket {
             ItemStack item = (ItemStack) dataInput.readObject();
             dataInput.close();
             return item;
-        } catch (ClassNotFoundException | IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            // Catch ClassCastException, ClassNotFoundException, and IOException
+            // Log the error but do not crash the server loop
+            plugin.getLogger().warning("Failed to deserialize market item (possibly corrupted Base64 or incompatible version): " + e.getMessage());
             return null;
         }
     }
