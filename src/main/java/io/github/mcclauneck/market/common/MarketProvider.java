@@ -10,9 +10,12 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.io.BukkitObjectInputStream;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -127,7 +130,12 @@ public class MarketProvider implements IMarket {
                         CurrencyType currency = CurrencyType.fromName(currencyStr);
                         if (currency == null) currency = CurrencyType.COIN;
 
-                        ItemStack stack = itemSection.getItemStack("metadata");
+                        ItemStack stack = null;
+                        String base64 = itemSection.getString("metadata");
+                        if (base64 != null) {
+                            stack = itemStackFromBase64(base64);
+                        }
+
                         if (stack == null) {
                             stack = new ItemStack(Material.STONE);
                         }
@@ -277,4 +285,17 @@ public class MarketProvider implements IMarket {
      * @param currency  The currency type used for the transaction.
      */
     public record MarketItem(ItemStack itemStack, int buyPrice, int sellPrice, CurrencyType currency) {}
+
+    private ItemStack itemStackFromBase64(String data) {
+        try {
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64.getDecoder().decode(data));
+            BukkitObjectInputStream dataInput = new BukkitObjectInputStream(inputStream);
+            ItemStack item = (ItemStack) dataInput.readObject();
+            dataInput.close();
+            return item;
+        } catch (ClassNotFoundException | IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
 }

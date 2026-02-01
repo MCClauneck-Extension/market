@@ -14,7 +14,9 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.profile.PlayerProfile;
 import org.bukkit.profile.PlayerTextures;
+import org.bukkit.util.io.BukkitObjectOutputStream;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -127,7 +129,7 @@ public class EditorUtil {
                 ItemStack toSave = item.clone();
                 cleanItemForSave(toSave, keyBuy, keySell, keyCurrency);
 
-                config.set("items." + key + ".metadata", toSave);
+                config.set("items." + key + ".metadata", itemStackToBase64(toSave));
                 config.set("items." + key + ".amount", item.getAmount());
                 config.set("items." + key + ".buy.price", buy);
                 config.set("items." + key + ".sell.price", sell);
@@ -212,5 +214,17 @@ public class EditorUtil {
 
         meta.setLore(lore);
         item.setItemMeta(meta);
+    }
+
+    private static String itemStackToBase64(ItemStack item) {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            BukkitObjectOutputStream dataOutput = new BukkitObjectOutputStream(outputStream);
+            dataOutput.writeObject(item);
+            dataOutput.close();
+            return Base64.getEncoder().encodeToString(outputStream.toByteArray());
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to save item stack", e);
+        }
     }
 }

@@ -203,10 +203,7 @@ public class Market implements IMCExtension {
                           price: 10
                         currency: coin
                         amount: 1
-                        metadata:
-                          ==: org.bukkit.inventory.ItemStack
-                          v: 3465
-                          type: IRON_ORE
+                        metadata: 'rO0ABXNyABpvcmcuYnVra2l0LnV0aWwuaW8uV3JhcHBlcvJQR+zxEm8FAgABTAADbWFwdAAPTGphdmEvdXRpbC9NYXA7eHBzcgA1Y29tLmdvb2dsZS5jb21tb24uY29sbGVjdC5JbW11dGFibGVNYXAkU2VyaWFsaXplZEZvcm0AAAAAAAAAAAIAAkwABGtleXN0ABJMamF2YS9sYW5nL09iamVjdDtMAAZ2YWx1ZXNxAH4ABHhwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAnQAAj09dAABdnVxAH4ACAAAAAJ0ABdvcmcuYnVra2l0LmludmVudG9yeS5JdGVtU3RhY2tzcgARamF2YS5sYW5nLkludGVnZXIS4qCk94GHOAIAAUkABXZhbHVleHIAEGphdmEubGFuZy5OdW1iZXKGrJUdC5TgiwIAAHhwAAADYXQACElST05fT1JF'
                       '2':
                         buy:
                           price: 450
@@ -214,10 +211,7 @@ public class Market implements IMCExtension {
                           price: 90
                         currency: coin
                         amount: 1
-                        metadata:
-                          ==: org.bukkit.inventory.ItemStack
-                          v: 3465
-                          type: IRON_BLOCK
+                        metadata: 'rO0ABXNyABpvcmcuYnVra2l0LnV0aWwuaW8uV3JhcHBlcvJQR+zxEm8FAgABTAADbWFwdAAPTGphdmEvdXRpbC9NYXA7eHBzcgA1Y29tLmdvb2dsZS5jb21tb24uY29sbGVjdC5JbW11dGFibGVNYXAkU2VyaWFsaXplZEZvcm0AAAAAAAAAAAIAAkwABGtleXN0ABJMamF2YS9sYW5nL09iamVjdDtMAAZ2YWx1ZXNxAH4ABHhwdXIAE1tMamF2YS5sYW5nLk9iamVjdDuQzlifEHMpbAIAAHhwAAAAAnQAAj09dAABdnVxAH4ACAAAAAJ0ABdvcmcuYnVra2l0LmludmVudG9yeS5JdGVtU3RhY2tzcgARamF2YS5sYW5nLkludGVnZXIS4qCk94GHOAIAAUkABXZhbHVleHIAEGphdmEubGFuZy5OdW1iZXKGrJUdC5TgiwIAAHhwAAADYXQACklST05fQkxPQ0s='
                     """;
             writer.write(content);
             plugin.getLogger().info("Created example market file: ore.yml");
