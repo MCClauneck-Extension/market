@@ -1,12 +1,12 @@
 package io.github.mcclauneck.market.common;
 
 import io.github.mcclauneck.market.api.IMarket;
+import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import io.github.mcengine.mceconomy.common.MCEconomyProvider;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -14,8 +14,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
@@ -134,7 +132,7 @@ public class MarketProvider implements IMarket {
                         ItemStack stack = null;
                         String base64 = itemSection.getString("metadata");
                         if (base64 != null && !base64.isEmpty()) {
-                            stack = itemStackFromBase64(base64);
+                            stack = EditorUtil.itemStackFromBase64(base64);
                         }
 
                         // Fallback to STONE if loading fails to prevent null-pointer errors later,
@@ -289,20 +287,4 @@ public class MarketProvider implements IMarket {
      * @param currency  The currency type used for the transaction.
      */
     public record MarketItem(ItemStack itemStack, int buyPrice, int sellPrice, CurrencyType currency) {}
-
-    private ItemStack itemStackFromBase64(String data) {
-        try {
-            // Decode Base64 -> YAML String
-            String yamlString = new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8);
-            
-            // Load YAML -> ItemStack
-            YamlConfiguration tempConfig = new YamlConfiguration();
-            tempConfig.loadFromString(yamlString);
-            
-            return tempConfig.getItemStack("i");
-        } catch (IllegalArgumentException | InvalidConfigurationException e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to deserialize market item: " + e.getMessage());
-            return null;
-        }
-    }
 }

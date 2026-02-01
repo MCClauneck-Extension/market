@@ -3,6 +3,7 @@ package io.github.mcclauneck.market;
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.editor.MarketEditor;
+import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcclauneck.market.listener.MarketListener;
 import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
 import io.github.mcengine.mcextension.api.IMCExtension;
@@ -20,8 +21,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -201,7 +200,7 @@ public class Market implements IMCExtension {
 
             // Item 1: Iron Ore
             ItemStack ironOre = new ItemStack(Material.IRON_ORE);
-            String b64Ore = itemStackToBase64(ironOre);
+            String b64Ore = EditorUtil.itemStackToBase64(ironOre);
             
             config.set("items.1.buy.price", 50);
             config.set("items.1.sell.price", 10);
@@ -211,7 +210,7 @@ public class Market implements IMCExtension {
 
             // Item 2: Iron Block
             ItemStack ironBlock = new ItemStack(Material.IRON_BLOCK);
-            String b64Block = itemStackToBase64(ironBlock);
+            String b64Block = EditorUtil.itemStackToBase64(ironBlock);
 
             config.set("items.2.buy.price", 450);
             config.set("items.2.sell.price", 90);
@@ -224,12 +223,5 @@ public class Market implements IMCExtension {
         } catch (IOException e) {
             plugin.getLogger().severe("Failed to create example market file: " + e.getMessage());
         }
-    }
-
-    private String itemStackToBase64(ItemStack item) {
-        YamlConfiguration tempConfig = new YamlConfiguration();
-        tempConfig.set("i", item);
-        String yamlString = tempConfig.saveToString();
-        return Base64.getEncoder().encodeToString(yamlString.getBytes(StandardCharsets.UTF_8));
     }
 }

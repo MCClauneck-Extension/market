@@ -116,10 +116,16 @@ public class MarketEditor implements Listener {
                 ConfigurationSection section = itemsSection.getConfigurationSection(String.valueOf(currentKey));
                 if (section == null) continue;
 
-                ItemStack item = section.getItemStack("metadata");
+                String base64 = section.getString("metadata");
+                ItemStack item = null;
+                if (base64 != null && !base64.isEmpty()) {
+                    item = EditorUtil.itemStackFromBase64(base64);
+                }
+
                 if (item == null) {
                     item = new ItemStack(Material.STONE);
                 }
+                
                 item.setAmount(section.getInt("amount", item.getAmount()));
 
                 int buy = section.getInt("buy.price", -1);

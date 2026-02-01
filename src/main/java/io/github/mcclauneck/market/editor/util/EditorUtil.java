@@ -33,7 +33,6 @@ import java.util.UUID;
  * <li>Updating item lore/metadata for the editor view.</li>
  * <li>Saving inventory pages to YAML while stripping editor artifacts.</li>
  * </ul>
- * </p>
  */
 public class EditorUtil {
 
@@ -216,10 +215,22 @@ public class EditorUtil {
         item.setItemMeta(meta);
     }
 
-    private static String itemStackToBase64(ItemStack item) {
+    public static String itemStackToBase64(ItemStack item) {
         YamlConfiguration tempConfig = new YamlConfiguration();
         tempConfig.set("i", item);
         String yamlString = tempConfig.saveToString();
         return Base64.getEncoder().encodeToString(yamlString.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public static ItemStack itemStackFromBase64(String data) {
+        try {
+            String yamlString = new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8);
+            YamlConfiguration tempConfig = new YamlConfiguration();
+            tempConfig.loadFromString(yamlString);
+            return tempConfig.getItemStack("i");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 }
