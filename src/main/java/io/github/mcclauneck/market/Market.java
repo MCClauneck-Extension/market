@@ -3,19 +3,22 @@ package io.github.mcclauneck.market;
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.editor.MarketEditor;
+import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcclauneck.market.listener.MarketListener;
 import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
 import io.github.mcengine.mcextension.api.IMCExtension;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.Collections;
@@ -181,8 +184,7 @@ public class Market implements IMCExtension {
     /**
      * Generates a default 'ore.yml' file if no markets exist.
      * <p>
-     * This provides a template for server administrators to understand how to configure
-     * new markets, demonstrating the new 'items' list structure.
+     * Uses the YAML-to-Base64 method to ensure the example file is compatible.
      * </p>
      *
      * @param marketFolder The directory to save the file in.
@@ -192,34 +194,31 @@ public class Market implements IMCExtension {
         File oreFile = new File(marketFolder, "ore.yml");
         if (oreFile.exists()) return;
 
-        try (FileWriter writer = new FileWriter(oreFile)) {
-            String content = """
-                    name: Ore Market
-                    items:
-                      '1':
-                        buy:
-                          price: 50
-                        sell:
-                          price: 10
-                        currency: coin
-                        amount: 1
-                        metadata:
-                          ==: org.bukkit.inventory.ItemStack
-                          v: 3465
-                          type: IRON_ORE
-                      '2':
-                        buy:
-                          price: 450
-                        sell:
-                          price: 90
-                        currency: coin
-                        amount: 1
-                        metadata:
-                          ==: org.bukkit.inventory.ItemStack
-                          v: 3465
-                          type: IRON_BLOCK
-                    """;
-            writer.write(content);
+        try {
+            YamlConfiguration config = new YamlConfiguration();
+            config.set("name", "Ore Market");
+
+            // Item 1: Iron Ore
+            ItemStack ironOre = new ItemStack(Material.IRON_ORE);
+            String b64Ore = EditorUtil.itemStackToBase64(ironOre);
+            
+            config.set("items.1.buy.price", 50);
+            config.set("items.1.sell.price", 10);
+            config.set("items.1.currency", "coin");
+            config.set("items.1.amount", 1);
+            config.set("items.1.metadata", b64Ore);
+
+            // Item 2: Iron Block
+            ItemStack ironBlock = new ItemStack(Material.IRON_BLOCK);
+            String b64Block = EditorUtil.itemStackToBase64(ironBlock);
+
+            config.set("items.2.buy.price", 450);
+            config.set("items.2.sell.price", 90);
+            config.set("items.2.currency", "coin");
+            config.set("items.2.amount", 1);
+            config.set("items.2.metadata", b64Block);
+
+            config.save(oreFile);
             plugin.getLogger().info("Created example market file: ore.yml");
         } catch (IOException e) {
             plugin.getLogger().severe("Failed to create example market file: " + e.getMessage());

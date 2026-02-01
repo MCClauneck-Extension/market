@@ -1,6 +1,7 @@
 package io.github.mcclauneck.market.common;
 
 import io.github.mcclauneck.market.api.IMarket;
+import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import io.github.mcengine.mceconomy.common.MCEconomyProvider;
 import org.bukkit.ChatColor;
@@ -15,6 +16,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
 
 /**
  * The core logic implementation for the Market extension.
@@ -127,9 +129,17 @@ public class MarketProvider implements IMarket {
                         CurrencyType currency = CurrencyType.fromName(currencyStr);
                         if (currency == null) currency = CurrencyType.COIN;
 
-                        ItemStack stack = itemSection.getItemStack("metadata");
+                        ItemStack stack = null;
+                        String base64 = itemSection.getString("metadata");
+                        if (base64 != null && !base64.isEmpty()) {
+                            stack = EditorUtil.itemStackFromBase64(base64);
+                        }
+
+                        // Fallback to STONE if loading fails to prevent null-pointer errors later,
+                        // but log it so the admin knows something is wrong.
                         if (stack == null) {
                             stack = new ItemStack(Material.STONE);
+                            plugin.getLogger().warning("Market '" + marketName + "' item #" + key + " failed to load metadata. Defaulting to STONE.");
                         }
                         
                         // Explicit amount override if saved separately

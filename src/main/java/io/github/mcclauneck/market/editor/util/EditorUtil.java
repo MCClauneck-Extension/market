@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -32,7 +33,6 @@ import java.util.UUID;
  * <li>Updating item lore/metadata for the editor view.</li>
  * <li>Saving inventory pages to YAML while stripping editor artifacts.</li>
  * </ul>
- * </p>
  */
 public class EditorUtil {
 
@@ -123,11 +123,12 @@ public class EditorUtil {
                 int sell = pdc.getOrDefault(keySell, PersistentDataType.INTEGER, -1);
                 String currency = pdc.getOrDefault(keyCurrency, PersistentDataType.STRING, "coin");
 
-                // Clean item for saving (Remove editor artifacts)
-                ItemStack toSave = item.clone();
+                // CRITICAL FIX: Create a FRESH ItemStack to strip CraftItemStack wrapper artifacts
+                // that can cause serialization to fail (resulting in STONE upon reload).
+                ItemStack toSave = new ItemStack(item);
                 cleanItemForSave(toSave, keyBuy, keySell, keyCurrency);
 
-                config.set("items." + key + ".metadata", toSave);
+                config.set("items." + key + ".metadata", itemStackToBase64(toSave));
                 config.set("items." + key + ".amount", item.getAmount());
                 config.set("items." + key + ".buy.price", buy);
                 config.set("items." + key + ".sell.price", sell);
@@ -212,5 +213,24 @@ public class EditorUtil {
 
         meta.setLore(lore);
         item.setItemMeta(meta);
+    }
+
+    public static String itemStackToBase64(ItemStack item) {
+        YamlConfiguration tempConfig = new YamlConfiguration();
+        tempConfig.set("i", item);
+        String yamlString = tempConfig.saveToString();
+        return Base64.getEncoder().encodeToString(yamlString.getBytes(StandardCharsets.UTF_8));
+    }
+
+    public static ItemStack itemStackFromBase64(String data) {
+        try {
+            String yamlString = new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8);
+            YamlConfiguration tempConfig = new YamlConfiguration();
+            tempConfig.loadFromString(yamlString);
+            return tempConfig.getItemStack("i");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 }
