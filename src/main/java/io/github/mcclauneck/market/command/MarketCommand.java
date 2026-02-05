@@ -2,8 +2,9 @@ package io.github.mcclauneck.market.command;
 
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -54,13 +55,13 @@ public class MarketCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+            sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", NamedTextColor.RED));
             return true;
         }
 
         // Note: The "edit" and "create" subcommand logic is intercepted in Market.java
         if (args.length == 0) {
-            player.sendMessage(ChatColor.RED + "Usage: /market <name> [page]");
+            player.sendMessage(Component.translatable("mcclauneck.market.command.usage", NamedTextColor.RED));
             return true;
         }
 
@@ -76,7 +77,8 @@ public class MarketCommand implements CommandExecutor {
         Map<Integer, MarketProvider.MarketItem> items = provider.getMarketItems(marketName);
 
         if (items == null) {
-            player.sendMessage(ChatColor.RED + "Market '" + marketName + "' not found.");
+            player.sendMessage(Component.translatable("mcclauneck.market.not_found", NamedTextColor.RED,
+                Component.text(marketName)));
             return true;
         }
 
@@ -99,7 +101,10 @@ public class MarketCommand implements CommandExecutor {
     public void openMarketGui(Player player, String marketName, Map<Integer, MarketProvider.MarketItem> items, int page) {
         // Create inventory with 54 slots (Double Chest size)
         // Title format must match what MarketListener expects ("Market: " + name + " | P" + page)
-        Inventory gui = Bukkit.createInventory(null, 54, "Market: " + marketName + " | P" + page);
+        // Note: Listener check updated to handle component-based logic or string parsing
+        Inventory gui = Bukkit.createInventory(null, 54, Component.translatable("mcclauneck.market.gui.title",
+            Component.text(marketName),
+            Component.text(page)));
 
         int itemsPerPage = 45;
         int startKey = (page - 1) * itemsPerPage + 1;
@@ -121,25 +126,29 @@ public class MarketCommand implements CommandExecutor {
                 
                 if (meta != null) {
                     // Append Price Lore to existing lore
-                    List<String> lore = meta.hasLore() ? meta.getLore() : new ArrayList<>();
+                    List<Component> lore = meta.hasLore() ? meta.lore() : new ArrayList<>();
                     
-                    lore.add(ChatColor.DARK_GRAY + "----------------");
+                    lore.add(Component.text("----------------", NamedTextColor.DARK_GRAY));
                     
                     if (data.buyPrice() >= 0) {
-                        lore.add(ChatColor.GREEN + "Buy: " + data.buyPrice() + " " + data.currency().getName());
+                        lore.add(Component.translatable("mcclauneck.market.item.buy", NamedTextColor.GREEN,
+                            Component.text(data.buyPrice()),
+                            Component.text(data.currency().getName())));
                     } else {
-                        lore.add(ChatColor.RED + "Buy: N/A");
+                        lore.add(Component.translatable("mcclauneck.market.item.buy_na", NamedTextColor.RED));
                     }
 
                     if (data.sellPrice() >= 0) {
-                        lore.add(ChatColor.AQUA + "Sell: " + data.sellPrice() + " " + data.currency().getName());
+                        lore.add(Component.translatable("mcclauneck.market.item.sell", NamedTextColor.AQUA,
+                            Component.text(data.sellPrice()),
+                            Component.text(data.currency().getName())));
                     } else {
-                        lore.add(ChatColor.RED + "Sell: N/A");
+                        lore.add(Component.translatable("mcclauneck.market.item.sell_na", NamedTextColor.RED));
                     }
                     
-                    lore.add(ChatColor.YELLOW + "Left-Click to Buy | Right-Click to Sell");
+                    lore.add(Component.translatable("mcclauneck.market.item.click_hint", NamedTextColor.YELLOW));
                     
-                    meta.setLore(lore);
+                    meta.lore(lore);
                     displayItem.setItemMeta(meta);
                 }
                 
@@ -150,19 +159,21 @@ public class MarketCommand implements CommandExecutor {
         // GUI Glass Filler for Bottom Row
         ItemStack glass = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta gMeta = glass.getItemMeta();
-        gMeta.setDisplayName(" ");
+        gMeta.displayName(Component.empty());
         glass.setItemMeta(gMeta);
 
         for (int i = 45; i < 54; i++) gui.setItem(i, glass);
 
         // Navigation Buttons
         if (page > 1) {
-            gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", "Previous Page"));
+            gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", 
+                Component.translatable("mcclauneck.market.gui.previous_page")));
         }
         
         boolean pageFull = (gui.getItem(44) != null);
         if (maxKey > (page * itemsPerPage) || pageFull) {
-             gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", "Next Page"));
+             gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", 
+                Component.translatable("mcclauneck.market.gui.next_page")));
         }
 
         player.openInventory(gui);

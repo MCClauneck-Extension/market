@@ -3,8 +3,9 @@ package io.github.mcclauneck.market.editor;
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.ConfigurationSection;
@@ -94,7 +95,10 @@ public class MarketEditor implements Listener {
     public void openEditor(Player player, String marketName, int page) {
         File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-        Inventory gui = Bukkit.createInventory(null, 54, "Edit Market: " + marketName + " | P" + page);
+        
+        Inventory gui = Bukkit.createInventory(null, 54, Component.translatable("mcclauneck.market.editor.title",
+            Component.text(marketName),
+            Component.text(page)));
 
         ConfigurationSection itemsSection = config.getConfigurationSection("items");
         int maxKey = 0;
@@ -142,19 +146,22 @@ public class MarketEditor implements Listener {
         // Controls Area (Bottom Row)
         ItemStack glass = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
         ItemMeta gMeta = glass.getItemMeta();
-        gMeta.setDisplayName(" ");
+        gMeta.displayName(Component.empty());
         glass.setItemMeta(gMeta);
         for (int i = 45; i < 54; i++) gui.setItem(i, glass);
 
         if (page > 1) {
-            gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", "Previous Page"));
+            gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", 
+                Component.translatable("mcclauneck.market.gui.previous_page")));
         }
         boolean pageFull = (gui.getItem(44) != null);
         if (maxKey > (page * itemsPerPage) || pageFull) {
-            gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", "Next Page"));
+            gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", 
+                Component.translatable("mcclauneck.market.gui.next_page")));
         }
         
-        gui.setItem(49, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTc0MjgxZjk2NjlmMmNkY2Y3ODQ4NDQ4YTViYjYyODIzMmVlYTJiZmJkZmM3ZDRmMjBiZGE1MDMzZDAzMzY2YSJ9fX0=", "Save & Reload"));
+        gui.setItem(49, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTc0MjgxZjk2NjlmMmNkY2Y3ODQ4NDQ4YTViYjYyODIzMmVlYTJiZmJkZmM3ZDRmMjBiZGE1MDMzZDAzMzY2YSJ9fX0=", 
+            Component.translatable("mcclauneck.market.editor.save")));
 
         activeSessions.put(player.getUniqueId(), new EditorSession(marketName, page));
         player.openInventory(gui);
@@ -173,8 +180,8 @@ public class MarketEditor implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!activeSessions.containsKey(player.getUniqueId())) return;
-        if (!event.getView().getTitle().startsWith("Edit Market:")) return;
-
+        
+        // Use active session check instead of title string check to support components/translations
         EditorSession session = activeSessions.get(player.getUniqueId());
 
         // Block interaction with control bar
@@ -221,7 +228,8 @@ public class MarketEditor implements Listener {
                 EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
                 pendingChat.put(player.getUniqueId(), new EditAction(event.getSlot(), type));
                 player.closeInventory();
-                player.sendMessage(ChatColor.GREEN + "Enter " + type + " price in chat (-1 to disable):");
+                player.sendMessage(Component.translatable("mcclauneck.market.editor.enter_price", NamedTextColor.GREEN,
+                    Component.text(type)));
             }
         } else if (event.getClick() == ClickType.MIDDLE) {
             event.setCancelled(true);
@@ -282,7 +290,7 @@ public class MarketEditor implements Listener {
                    }
                 });
             } catch (NumberFormatException e) {
-                event.getPlayer().sendMessage(ChatColor.RED + "Invalid number.");
+                event.getPlayer().sendMessage(Component.translatable("mcclauneck.market.error.invalid_number", NamedTextColor.RED));
                 Bukkit.getScheduler().runTask(plugin, () -> openEditor(event.getPlayer(), session.marketName, session.page));
             }
         }
@@ -304,7 +312,7 @@ public class MarketEditor implements Listener {
                 EditorSession session = activeSessions.remove(player.getUniqueId());
                 EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
                 provider.loadMarkets();
-                player.sendMessage(ChatColor.GREEN + "Market saved!");
+                player.sendMessage(Component.translatable("mcclauneck.market.editor.saved", NamedTextColor.GREEN));
             }
         }
     }

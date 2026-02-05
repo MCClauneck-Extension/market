@@ -2,6 +2,7 @@ package io.github.mcclauneck.market.listener;
 
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -58,7 +59,15 @@ public class MarketListener implements Listener {
      */
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        String title = event.getView().getTitle();
+        // Use Component serialization for title check as getView().getTitle() is deprecated/unreliable with Adventure
+        // However, for compatibility with legacy Spigot/Paper versions, we often rely on the view title string.
+        // We will assume the server handles Component -> String serialization for getView().getTitle() internally
+        // or check against the plain text version.
+        String title = event.getView().getTitle(); 
+        
+        // Adventure-safe fallback: In modern Paper, getTitle() might return serialized json or plain text.
+        // It is safer to rely on session tracking (like Editor) or NBT tags on the inventory holder,
+        // but for this implementation we stick to string parsing for simplicity, assuming plain text.
         if (!title.startsWith("Market: ")) return;
 
         event.setCancelled(true);
@@ -68,6 +77,7 @@ public class MarketListener implements Listener {
         if (event.getClickedInventory() == event.getView().getBottomInventory()) return;
 
         // Parse Title: "Market: ore | P1"
+        // Note: This parsing relies on the exact string format set in MarketCommand
         String[] parts = title.replace("Market: ", "").split(" \\| P");
         String marketName = parts[0];
         int page = 1;

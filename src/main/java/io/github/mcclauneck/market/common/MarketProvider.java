@@ -4,7 +4,9 @@ import io.github.mcclauneck.market.api.IMarket;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import io.github.mcengine.mceconomy.common.MCEconomyProvider;
-import org.bukkit.ChatColor;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -16,7 +18,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Level;
 
 /**
  * The core logic implementation for the Market extension.
@@ -191,7 +192,7 @@ public class MarketProvider implements IMarket {
 
         // 1. Check Inventory Space (Sync)
         if (player.getInventory().firstEmpty() == -1) {
-            player.sendMessage(ChatColor.RED + "Inventory full!");
+            player.sendMessage(Component.translatable("mcclauneck.market.error.inventory_full", NamedTextColor.RED));
             return;
         }
 
@@ -203,14 +204,27 @@ public class MarketProvider implements IMarket {
                     if (success) {
                         player.getInventory().addItem(itemData.itemStack.clone());
                         
-                        String itemName = itemData.itemStack.hasItemMeta() && itemData.itemStack.getItemMeta().hasDisplayName()
-                            ? itemData.itemStack.getItemMeta().getDisplayName()
-                            : itemData.itemStack.getType().name();
+                        // Adventure Component logic for item name display
+                        Component itemNameComponent;
+                        if (itemData.itemStack.hasItemMeta() && itemData.itemStack.getItemMeta().hasDisplayName()) {
+                            itemNameComponent = itemData.itemStack.getItemMeta().displayName();
+                        } else {
+                            // Fallback to translatable material name if no custom name
+                             itemNameComponent = Component.translatable(itemData.itemStack.getType().translationKey());
+                        }
+                        
+                        // If null (rare), fallback to plain string
+                        if (itemNameComponent == null) {
+                            itemNameComponent = Component.text(itemData.itemStack.getType().name());
+                        }
                             
-                        player.sendMessage(ChatColor.GREEN + "Bought " + itemData.itemStack.getAmount() + "x " + itemName + 
-                            " for " + itemData.buyPrice + " " + itemData.currency.getName());
+                        player.sendMessage(Component.translatable("mcclauneck.market.buy.success", NamedTextColor.GREEN,
+                            Component.text(itemData.itemStack.getAmount()),
+                            itemNameComponent,
+                            Component.text(itemData.buyPrice),
+                            Component.text(itemData.currency.getName())));
                     } else {
-                        player.sendMessage(ChatColor.RED + "Insufficient funds!");
+                        player.sendMessage(Component.translatable("mcclauneck.market.error.insufficient_funds", NamedTextColor.RED));
                     }
                 });
             });
@@ -242,7 +256,7 @@ public class MarketProvider implements IMarket {
         // 1. Check & Remove Item (Sync)
         ItemStack toRemove = itemData.itemStack.clone();
         if (!player.getInventory().containsAtLeast(toRemove, toRemove.getAmount())) {
-            player.sendMessage(ChatColor.RED + "You don't have enough items to sell!");
+            player.sendMessage(Component.translatable("mcclauneck.market.error.no_item_to_sell", NamedTextColor.RED));
             return;
         }
 
@@ -252,7 +266,9 @@ public class MarketProvider implements IMarket {
         MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), "PLAYER", itemData.currency, itemData.sellPrice)
             .thenAccept(success -> {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    player.sendMessage(ChatColor.GREEN + "Sold for " + itemData.sellPrice + " " + itemData.currency.getName());
+                    player.sendMessage(Component.translatable("mcclauneck.market.sell.success", NamedTextColor.GREEN,
+                        Component.text(itemData.sellPrice),
+                        Component.text(itemData.currency.getName())));
                 });
             });
     }
