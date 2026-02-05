@@ -3,8 +3,10 @@ package io.github.mcclauneck.market.editor;
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
+import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -16,7 +18,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -259,7 +260,7 @@ public class MarketEditor implements Listener {
      * @param event The chat event.
      */
     @EventHandler
-    public void onChat(AsyncPlayerChatEvent event) {
+    public void onChat(AsyncChatEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         if (pendingChat.containsKey(uuid)) {
             event.setCancelled(true);
@@ -267,7 +268,9 @@ public class MarketEditor implements Listener {
             EditorSession session = activeSessions.get(uuid);
             
             try {
-                int price = Integer.parseInt(event.getMessage());
+                String plainMessage = PlainTextComponentSerializer.plainText().serialize(event.message());
+                int price = Integer.parseInt(plainMessage);
+                
                 Bukkit.getScheduler().runTask(plugin, () -> {
                    openEditor(event.getPlayer(), session.marketName, session.page);
                    Inventory inv = event.getPlayer().getOpenInventory().getTopInventory();
