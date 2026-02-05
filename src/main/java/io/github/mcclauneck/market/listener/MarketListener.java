@@ -64,34 +64,15 @@ public class MarketListener implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         Component titleComponent = event.getView().title();
-        String plainTitle = PlainTextComponentSerializer.plainText().serialize(titleComponent);
         
-        // Robust check: 
-        // 1. English Prefix "Market: "
-        // 2. Thai Prefix "ตลาด: " (Common translation)
-        // 3. Translatable Key "mcclauneck.market.gui.title"
-        boolean isMarket = plainTitle.startsWith("Market: ") || plainTitle.startsWith("ตลาด: ");
-        
-        if (!isMarket && titleComponent instanceof TranslatableComponent tc) {
-            if (tc.key().equals("mcclauneck.market.gui.title")) {
-                isMarket = true;
-            }
-        }
-
-        if (!isMarket) return;
-
-        event.setCancelled(true);
-        if (!(event.getWhoClicked() instanceof Player player)) return;
-        
-        // Ensure user clicked top inventory (Market), not their own bottom inventory
-        if (event.getClickedInventory() == event.getView().getBottomInventory()) return;
-
-        // Parse Title to get Market Name and Page
+        // 1. Verify Inventory Identity via Component Key (Robust)
+        boolean isMarket = false;
         String marketName = "unknown";
         int page = 1;
 
         if (titleComponent instanceof TranslatableComponent tc && tc.key().equals("mcclauneck.market.gui.title")) {
-            // Args: [0]=Name, [1]=Page
+            isMarket = true;
+            // Extract arguments directly from the component (Name is arg0, Page is arg1)
             List<Component> args = tc.args();
             if (!args.isEmpty()) {
                 marketName = PlainTextComponentSerializer.plainText().serialize(args.get(0));
@@ -102,29 +83,35 @@ public class MarketListener implements Listener {
                     page = Integer.parseInt(pageStr);
                 } catch (NumberFormatException ignored) {}
             }
-        } else {
-            // Fallback: Legacy String Parsing
-            // Handle both "Market: name | P1" and "ตลาด: name | หน้า 1"
-            String cleanTitle = plainTitle;
-            if (cleanTitle.startsWith("Market: ")) cleanTitle = cleanTitle.replace("Market: ", "");
-            else if (cleanTitle.startsWith("ตลาด: ")) cleanTitle = cleanTitle.replace("ตลาด: ", "");
-            
-            // Split by pipe
-            String[] parts = cleanTitle.split(" \\| ");
-            if (parts.length > 0) {
-                marketName = parts[0];
-            }
-            
-            if (parts.length > 1) {
-                // Parse Page part: "P1" or "หน้า 1"
-                String pagePart = parts[1].trim();
-                // Strip non-digits
-                String numStr = pagePart.replaceAll("[^0-9]", "");
-                try {
-                    page = Integer.parseInt(numStr);
-                } catch (NumberFormatException ignored) {}
+        } 
+        // 2. Fallback: Verify via Plain Text (Legacy/Flattened support)
+        else {
+            String plainTitle = PlainTextComponentSerializer.plainText().serialize(titleComponent);
+            // Check for English or Thai prefixes if component verification fails
+            if (plainTitle.startsWith("Market: ") || plainTitle.startsWith("ตลาด: ")) {
+                isMarket = true;
+                
+                // Naive parsing for fallback
+                String cleanTitle = plainTitle.replace("Market: ", "").replace("ตลาด: ", "");
+                String[] parts = cleanTitle.split(" \\| "); // Split by " | " separator
+                if (parts.length > 0) {
+                    marketName = parts[0];
+                }
+                if (parts.length > 1) {
+                    // Try to parse page number from "P1" or "หน้า 1"
+                    String numStr = parts[1].replaceAll("[^0-9]", "");
+                    try { page = Integer.parseInt(numStr); } catch (NumberFormatException ignored) {}
+                }
             }
         }
+
+        if (!isMarket) return;
+
+        event.setCancelled(true);
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        
+        // Ensure user clicked top inventory (Market), not their own bottom inventory
+        if (event.getClickedInventory() == event.getView().getBottomInventory()) return;
 
         int slot = event.getSlot();
 
