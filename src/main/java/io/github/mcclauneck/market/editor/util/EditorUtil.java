@@ -1,12 +1,13 @@
 package io.github.mcclauneck.market.editor.util;
 
+import com.destroystokyo.paper.profile.PlayerProfile;
+import com.destroystokyo.paper.profile.ProfileProperty;
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -16,13 +17,9 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.profile.PlayerProfile;
-import org.bukkit.profile.PlayerTextures;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -73,21 +70,11 @@ public class EditorUtil {
         SkullMeta meta = (SkullMeta) item.getItemMeta();
         if (meta == null) return item;
 
-        // Use native Bukkit PlayerProfile API (No AuthLib needed)
-        PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
-        PlayerTextures textures = profile.getTextures();
+        // Use Paper PlayerProfile API
+        PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID());
+        profile.setProperty(new ProfileProperty("textures", b64));
 
-        try {
-            // Decode Base64 to get the URL inside the JSON
-            String decoded = new String(Base64.getDecoder().decode(b64));
-            String urlString = decoded.substring(decoded.indexOf("http"), decoded.lastIndexOf("\""));
-            textures.setSkin(new URL(urlString));
-            profile.setTextures(textures);
-        } catch (MalformedURLException | IllegalArgumentException | IndexOutOfBoundsException e) {
-            e.printStackTrace();
-        }
-
-        meta.setOwnerProfile(profile);
+        meta.setPlayerProfile(profile);
         meta.displayName(name.colorIfAbsent(NamedTextColor.WHITE));
         item.setItemMeta(meta);
         return item;
