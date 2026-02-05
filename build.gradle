@@ -86,3 +86,25 @@ processResources {
     }
 }
 
+jar {
+    String pluginBuildPath = System.getenv("MCEXTENSION_MCECONOMY_BUILD_PATH")
+    if (pluginBuildPath != null && !pluginBuildPath.isEmpty()) {
+        def outputDir = file(pluginBuildPath)
+        destinationDirectory.set(outputDir)
+
+        // Clean up old versions in the target directory before writing the new one
+        // This prevents 'Plugin-1.0.jar' and 'Plugin-1.1.jar' from co-existing
+        doFirst {
+            if (outputDir.exists()) {
+                String baseName = archiveBaseName.get()
+                outputDir.listFiles()?.each { f ->
+                    // Deletes files starting with the base name (e.g., "slayer-rewards-") and ending in ".jar"
+                    if (f.name.startsWith("${baseName}-") && f.name.endsWith(".jar")) {
+                        println "[Clean] Deleting old plugin version: ${f.name}"
+                        f.delete()
+                    }
+                }
+            }
+        }
+    }
+}
