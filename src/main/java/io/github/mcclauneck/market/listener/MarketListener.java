@@ -64,54 +64,33 @@ public class MarketListener implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         Component titleComponent = event.getView().title();
-        
-        // 1. Verify Inventory Identity via Component Key (Robust)
-        boolean isMarket = false;
-        String marketName = "unknown";
-        int page = 1;
 
-        if (titleComponent instanceof TranslatableComponent tc && tc.key().equals("mcclauneck.market.gui.title")) {
-            isMarket = true;
-            // Extract arguments directly from the component (Name is arg0, Page is arg1)
-            List<Component> args = tc.args();
-            if (!args.isEmpty()) {
-                marketName = PlainTextComponentSerializer.plainText().serialize(args.get(0));
-            }
-            if (args.size() >= 2) {
-                try {
-                    String pageStr = PlainTextComponentSerializer.plainText().serialize(args.get(1));
-                    page = Integer.parseInt(pageStr);
-                } catch (NumberFormatException ignored) {}
-            }
-        } 
-        // 2. Fallback: Verify via Plain Text (Legacy/Flattened support)
-        else {
-            String plainTitle = PlainTextComponentSerializer.plainText().serialize(titleComponent);
-            // Check for English or Thai prefixes if component verification fails
-            if (plainTitle.startsWith("Market: ") || plainTitle.startsWith("ตลาด: ")) {
-                isMarket = true;
-                
-                // Naive parsing for fallback
-                String cleanTitle = plainTitle.replace("Market: ", "").replace("ตลาด: ", "");
-                String[] parts = cleanTitle.split(" \\| "); // Split by " | " separator
-                if (parts.length > 0) {
-                    marketName = parts[0];
-                }
-                if (parts.length > 1) {
-                    // Try to parse page number from "P1" or "หน้า 1"
-                    String numStr = parts[1].replaceAll("[^0-9]", "");
-                    try { page = Integer.parseInt(numStr); } catch (NumberFormatException ignored) {}
-                }
-            }
+        // Strict Check: Ensure we are dealing with the specific TranslatableComponent key
+        // We do NOT use plain text startsWith checks to ensure compatibility with translations
+        if (!(titleComponent instanceof TranslatableComponent tc) || !tc.key().equals("mcclauneck.market.gui.title")) {
+            return;
         }
-
-        if (!isMarket) return;
 
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
         
         // Ensure user clicked top inventory (Market), not their own bottom inventory
         if (event.getClickedInventory() == event.getView().getBottomInventory()) return;
+
+        // Extract Arguments: [0]=Name, [1]=Page
+        String marketName = "unknown";
+        int page = 1;
+
+        List<Component> args = tc.args();
+        if (!args.isEmpty()) {
+            marketName = PlainTextComponentSerializer.plainText().serialize(args.get(0));
+        }
+        if (args.size() >= 2) {
+            try {
+                String pageStr = PlainTextComponentSerializer.plainText().serialize(args.get(1));
+                page = Integer.parseInt(pageStr);
+            } catch (NumberFormatException ignored) {}
+        }
 
         int slot = event.getSlot();
 
