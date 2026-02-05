@@ -53,12 +53,8 @@ repositories {
     }
 
     maven {
-        name = 'spigotmc'
-        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
-    }
-    maven {
-        name = 'sonatype'
-        url = 'https://oss.sonatype.org/content/groups/public/'
+        name = 'papermc'
+        url = 'https://repo.papermc.io/repository/maven-public/'
     }
 }
 
@@ -67,8 +63,7 @@ dependencies {
     compileOnly 'io.github.mcengine:mcextension:2026.0.2-7'
     compileOnly 'io.github.mcengine:mceconomy-common:2026.0.0-4'
 
-    // Spigot API
-    compileOnly 'org.spigotmc:spigot-api:1.21.1-R0.1-SNAPSHOT'
+    compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT'
 }
 
 /**
