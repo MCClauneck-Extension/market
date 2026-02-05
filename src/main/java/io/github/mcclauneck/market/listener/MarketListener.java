@@ -2,6 +2,8 @@ package io.github.mcclauneck.market.listener;
 
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -9,6 +11,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
+
+import java.util.List;
 
 /**
  * Handles Bukkit inventory events to facilitate Market interactions.
@@ -46,8 +50,8 @@ public class MarketListener implements Listener {
      * <p>
      * <b>Logic:</b>
      * <ul>
-     * <li>Checks if the inventory title starts with "Market: ".</li>
-     * <li>Parses the market name and page number from the title.</li>
+     * <li>Checks if the inventory title matches the market format (Component-aware).</li>
+     * <li>Parses the market name and page number.</li>
      * <li>Cancels the event to protect GUI items.</li>
      * <li>Handles pagination button clicks (Previous/Next Page).</li>
      * <li>Left Click -> Triggers Buy.</li>
@@ -59,16 +63,19 @@ public class MarketListener implements Listener {
      */
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        // Use Component serialization for title check as getView().getTitle() is deprecated/unreliable with Adventure
-        // However, for compatibility with legacy Spigot/Paper versions, we often rely on the view title string.
-        // We will assume the server handles Component -> String serialization for getView().getTitle() internally
-        // or check against the plain text version.
-        String title = event.getView().getTitle(); 
+        Component titleComponent = event.getView().title();
+        String plainTitle = PlainTextComponentSerializer.plainText().serialize(titleComponent);
+        boolean isMarket = plainTitle.startsWith("Market: ");
         
-        // Adventure-safe fallback: In modern Paper, getTitle() might return serialized json or plain text.
-        // It is safer to rely on session tracking (like Editor) or NBT tags on the inventory holder,
-        // but for this implementation we stick to string parsing for simplicity, assuming plain text.
-        if (!title.startsWith("Market: ")) return;
+        // Robust check: Verify TranslatableComponent key if plain text fails
+        // This handles cases where the server hasn't translated the component to text yet
+        if (!isMarket && titleComponent instanceof TranslatableComponent tc) {
+            if (tc.key().equals("mcclauneck.market.gui.title")) {
+                isMarket = true;
+            }
+        }
+
+        if (!isMarket) return;
 
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -76,15 +83,31 @@ public class MarketListener implements Listener {
         // Ensure user clicked top inventory (Market), not their own bottom inventory
         if (event.getClickedInventory() == event.getView().getBottomInventory()) return;
 
-        // Parse Title: "Market: ore | P1"
-        // Note: This parsing relies on the exact string format set in MarketCommand
-        String[] parts = title.replace("Market: ", "").split(" \\| P");
-        String marketName = parts[0];
+        // Parse Title to get Market Name and Page
+        String marketName = "unknown";
         int page = 1;
-        if (parts.length > 1) {
-            try {
-                page = Integer.parseInt(parts[1]);
-            } catch (NumberFormatException ignored) {}
+
+        if (titleComponent instanceof TranslatableComponent tc && tc.key().equals("mcclauneck.market.gui.title")) {
+            // Args: [0]=Name, [1]=Page
+            List<Component> args = tc.args();
+            if (!args.isEmpty()) {
+                marketName = PlainTextComponentSerializer.plainText().serialize(args.get(0));
+            }
+            if (args.size() >= 2) {
+                try {
+                    String pageStr = PlainTextComponentSerializer.plainText().serialize(args.get(1));
+                    page = Integer.parseInt(pageStr);
+                } catch (NumberFormatException ignored) {}
+            }
+        } else {
+            // Fallback: Legacy String Parsing
+            String[] parts = plainTitle.replace("Market: ", "").split(" \\| P");
+            marketName = parts[0];
+            if (parts.length > 1) {
+                try {
+                    page = Integer.parseInt(parts[1]);
+                } catch (NumberFormatException ignored) {}
+            }
         }
 
         int slot = event.getSlot();
