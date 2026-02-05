@@ -2,12 +2,17 @@ package io.github.mcclauneck.market.listener;
 
 import io.github.mcclauneck.market.command.MarketCommand;
 import io.github.mcclauneck.market.common.MarketProvider;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TranslatableComponent;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
+
+import java.util.List;
 
 /**
  * Handles Bukkit inventory events to facilitate Market interactions.
@@ -45,8 +50,8 @@ public class MarketListener implements Listener {
      * <p>
      * <b>Logic:</b>
      * <ul>
-     * <li>Checks if the inventory title starts with "Market: ".</li>
-     * <li>Parses the market name and page number from the title.</li>
+     * <li>Checks if the inventory title matches the market format (Component-aware).</li>
+     * <li>Parses the market name and page number.</li>
      * <li>Cancels the event to protect GUI items.</li>
      * <li>Handles pagination button clicks (Previous/Next Page).</li>
      * <li>Left Click -> Triggers Buy.</li>
@@ -58,8 +63,13 @@ public class MarketListener implements Listener {
      */
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        String title = event.getView().getTitle();
-        if (!title.startsWith("Market: ")) return;
+        Component titleComponent = event.getView().title();
+
+        // Strict Check: Ensure we are dealing with the specific TranslatableComponent key
+        // We do NOT use plain text startsWith checks to ensure compatibility with translations
+        if (!(titleComponent instanceof TranslatableComponent tc) || !tc.key().equals("mcclauneck.market.gui.title")) {
+            return;
+        }
 
         event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -67,13 +77,18 @@ public class MarketListener implements Listener {
         // Ensure user clicked top inventory (Market), not their own bottom inventory
         if (event.getClickedInventory() == event.getView().getBottomInventory()) return;
 
-        // Parse Title: "Market: ore | P1"
-        String[] parts = title.replace("Market: ", "").split(" \\| P");
-        String marketName = parts[0];
+        // Extract Arguments: [0]=Name, [1]=Page
+        String marketName = "unknown";
         int page = 1;
-        if (parts.length > 1) {
+
+        List<Component> args = tc.args();
+        if (!args.isEmpty()) {
+            marketName = PlainTextComponentSerializer.plainText().serialize(args.get(0));
+        }
+        if (args.size() >= 2) {
             try {
-                page = Integer.parseInt(parts[1]);
+                String pageStr = PlainTextComponentSerializer.plainText().serialize(args.get(1));
+                page = Integer.parseInt(pageStr);
             } catch (NumberFormatException ignored) {}
         }
 

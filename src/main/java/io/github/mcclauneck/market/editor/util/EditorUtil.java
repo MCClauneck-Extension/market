@@ -1,6 +1,10 @@
 package io.github.mcclauneck.market.editor.util;
 
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TranslatableComponent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -47,11 +51,11 @@ public class EditorUtil {
      * @param name The display name of the button.
      * @return The constructed ItemStack.
      */
-    public static ItemStack createButton(Material mat, String name) {
+    public static ItemStack createButton(Material mat, Component name) {
         ItemStack item = new ItemStack(mat);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(ChatColor.WHITE + name);
+            meta.displayName(name.colorIfAbsent(NamedTextColor.WHITE));
             item.setItemMeta(meta);
         }
         return item;
@@ -64,7 +68,7 @@ public class EditorUtil {
      * @param name The display name of the button.
      * @return The constructed ItemStack.
      */
-    public static ItemStack createSkullButton(String b64, String name) {
+    public static ItemStack createSkullButton(String b64, Component name) {
         ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) item.getItemMeta();
         if (meta == null) return item;
@@ -84,7 +88,7 @@ public class EditorUtil {
         }
 
         meta.setOwnerProfile(profile);
-        meta.setDisplayName(ChatColor.WHITE + name);
+        meta.displayName(name.colorIfAbsent(NamedTextColor.WHITE));
         item.setItemMeta(meta);
         return item;
     }
@@ -158,12 +162,44 @@ public class EditorUtil {
         if (meta == null) return;
 
         if (meta.hasLore()) {
-            List<String> lore = meta.getLore();
-            // Remove editor footer (last 7 lines)
-            if (lore.size() >= 7 && lore.get(lore.size() - 1).contains("Middle Click")) {
-                for (int i = 0; i < 7; i++) lore.remove(lore.size() - 1);
+            List<Component> lore = meta.lore();
+            if (lore != null) {
+                // Robust loop to strip multiple stacks of editor lore if they exist
+                while (!lore.isEmpty()) {
+                    Component lastLine = lore.get(lore.size() - 1);
+                    boolean isEditorFooter = false;
+
+                    // 1. Check by Translatable Key (Most reliable)
+                    if (lastLine instanceof TranslatableComponent tc) {
+                        if (tc.key().equals("mcclauneck.market.editor.lore.middle_hint")) {
+                            isEditorFooter = true;
+                        }
+                    }
+
+                    // 2. Check by Plain Text (Fallback for legacy/flattened components)
+                    // Checks for English "Middle Click" or Thai "คลิกเมาส์กลาง"
+                    if (!isEditorFooter) {
+                        String plain = PlainTextComponentSerializer.plainText().serialize(lastLine);
+                        if (plain.contains("Middle Click") || plain.contains("คลิกเมาส์กลาง")) {
+                            isEditorFooter = true;
+                        }
+                    }
+
+                    if (isEditorFooter) {
+                        // Remove the 7-line editor block
+                        int removeCount = 7;
+                        if (lore.size() < 7) removeCount = lore.size(); // Safety check
+                        
+                        for (int i = 0; i < removeCount; i++) {
+                            lore.remove(lore.size() - 1);
+                        }
+                    } else {
+                        // Stop if the bottom line is not part of the editor footer
+                        break;
+                    }
+                }
+                meta.lore(lore);
             }
-            meta.setLore(lore);
         }
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
@@ -195,23 +231,41 @@ public class EditorUtil {
         pdc.set(kCur, PersistentDataType.STRING, currency.getName());
 
         // 2. Prepare Lore
-        List<String> lore = meta.hasLore() ? meta.getLore() : new java.util.ArrayList<>();
-        
-        // Remove old footer if exists to prevent stacking
-        if (lore.size() >= 7 && lore.get(lore.size() - 1).contains("Middle Click")) {
-            for (int i = 0; i < 7; i++) lore.remove(lore.size() - 1);
+        // First, perform a clean-up to ensure we don't stack lore if this item is updated multiple times in the GUI
+        List<Component> lore = meta.hasLore() ? meta.lore() : new java.util.ArrayList<>();
+        if (lore != null) {
+            // Reuse the cleaning logic pattern
+            while (!lore.isEmpty()) {
+                Component lastLine = lore.get(lore.size() - 1);
+                boolean isFooter = false;
+                if (lastLine instanceof TranslatableComponent tc && tc.key().equals("mcclauneck.market.editor.lore.middle_hint")) isFooter = true;
+                else {
+                    String plain = PlainTextComponentSerializer.plainText().serialize(lastLine);
+                    if (plain.contains("Middle Click") || plain.contains("คลิกเมาส์กลาง")) isFooter = true;
+                }
+                
+                if (isFooter) {
+                    int removeCount = Math.min(7, lore.size());
+                    for (int i = 0; i < removeCount; i++) lore.remove(lore.size() - 1);
+                } else {
+                    break;
+                }
+            }
         }
 
         // 3. Append Editor Instructions
-        lore.add(ChatColor.DARK_GRAY + "----------------");
-        lore.add(ChatColor.GREEN + "Buy: " + (buy >= 0 ? buy : "N/A"));
-        lore.add(ChatColor.AQUA + "Sell: " + (sell >= 0 ? sell : "N/A"));
-        lore.add(ChatColor.GOLD + "Currency: " + currency.getName());
-        lore.add(ChatColor.DARK_GRAY + "----------------");
-        lore.add(ChatColor.YELLOW + "Shift+L: Set Buy | Shift+R: Set Sell");
-        lore.add(ChatColor.YELLOW + "Middle Click: Cycle Currency");
+        lore.add(Component.text("----------------", NamedTextColor.DARK_GRAY));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.buy", NamedTextColor.GREEN, 
+            Component.text(buy >= 0 ? String.valueOf(buy) : "N/A")));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.sell", NamedTextColor.AQUA, 
+            Component.text(sell >= 0 ? String.valueOf(sell) : "N/A")));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.currency", NamedTextColor.GOLD, 
+            Component.text(currency.getName())));
+        lore.add(Component.text("----------------", NamedTextColor.DARK_GRAY));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.shift_hint", NamedTextColor.YELLOW));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.middle_hint", NamedTextColor.YELLOW));
 
-        meta.setLore(lore);
+        meta.lore(lore);
         item.setItemMeta(meta);
     }
 

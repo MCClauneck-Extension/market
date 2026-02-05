@@ -7,8 +7,9 @@ import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcclauneck.market.listener.MarketListener;
 import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
 import io.github.mcengine.mcextension.api.IMCExtension;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandMap;
@@ -100,24 +101,26 @@ public class Market implements IMCExtension {
                         // Handle "create" subcommand
                         if (args[0].equalsIgnoreCase("create")) {
                              if (!(sender instanceof Player player)) {
-                                sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+                                sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", NamedTextColor.RED));
                                 return true;
                             }
                             if (!player.hasPermission("market.admin")) {
-                                player.sendMessage(ChatColor.RED + "No permission.");
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.permission_denied", NamedTextColor.RED));
                                 return true;
                             }
                             if (args.length < 2) {
-                                player.sendMessage(ChatColor.RED + "Usage: /market create <name>");
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.usage_create", NamedTextColor.RED));
                                 return true;
                             }
                             
                             boolean created = provider.createMarket(args[1]);
                             if (created) {
-                                player.sendMessage(ChatColor.GREEN + "Market '" + args[1] + "' created successfully!");
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.create_success", NamedTextColor.GREEN,
+                                    Component.text(args[1])));
                                 editor.openEditor(player, args[1]);
                             } else {
-                                player.sendMessage(ChatColor.RED + "Market '" + args[1] + "' already exists.");
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.create_exists", NamedTextColor.RED,
+                                    Component.text(args[1])));
                             }
                             return true;
                         }
@@ -125,15 +128,15 @@ public class Market implements IMCExtension {
                         // Handle "edit" subcommand
                         if (args[0].equalsIgnoreCase("edit")) {
                             if (!(sender instanceof Player player)) {
-                                sender.sendMessage(ChatColor.RED + "Only players can use this command.");
+                                sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", NamedTextColor.RED));
                                 return true;
                             }
                             if (!player.hasPermission("market.admin")) {
-                                player.sendMessage(ChatColor.RED + "No permission.");
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.permission_denied", NamedTextColor.RED));
                                 return true;
                             }
                             if (args.length < 2) {
-                                player.sendMessage(ChatColor.RED + "Usage: /market edit <name> [page]");
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.usage_edit", NamedTextColor.RED));
                                 return true;
                             }
                             int page = 1;
