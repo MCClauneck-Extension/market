@@ -65,10 +65,13 @@ public class MarketListener implements Listener {
     public void onInventoryClick(InventoryClickEvent event) {
         Component titleComponent = event.getView().title();
         String plainTitle = PlainTextComponentSerializer.plainText().serialize(titleComponent);
-        boolean isMarket = plainTitle.startsWith("Market: ");
         
-        // Robust check: Verify TranslatableComponent key if plain text fails
-        // This handles cases where the server hasn't translated the component to text yet
+        // Robust check: 
+        // 1. English Prefix "Market: "
+        // 2. Thai Prefix "ตลาด: " (Common translation)
+        // 3. Translatable Key "mcclauneck.market.gui.title"
+        boolean isMarket = plainTitle.startsWith("Market: ") || plainTitle.startsWith("ตลาด: ");
+        
         if (!isMarket && titleComponent instanceof TranslatableComponent tc) {
             if (tc.key().equals("mcclauneck.market.gui.title")) {
                 isMarket = true;
@@ -101,11 +104,24 @@ public class MarketListener implements Listener {
             }
         } else {
             // Fallback: Legacy String Parsing
-            String[] parts = plainTitle.replace("Market: ", "").split(" \\| P");
-            marketName = parts[0];
+            // Handle both "Market: name | P1" and "ตลาด: name | หน้า 1"
+            String cleanTitle = plainTitle;
+            if (cleanTitle.startsWith("Market: ")) cleanTitle = cleanTitle.replace("Market: ", "");
+            else if (cleanTitle.startsWith("ตลาด: ")) cleanTitle = cleanTitle.replace("ตลาด: ", "");
+            
+            // Split by pipe
+            String[] parts = cleanTitle.split(" \\| ");
+            if (parts.length > 0) {
+                marketName = parts[0];
+            }
+            
             if (parts.length > 1) {
+                // Parse Page part: "P1" or "หน้า 1"
+                String pagePart = parts[1].trim();
+                // Strip non-digits
+                String numStr = pagePart.replaceAll("[^0-9]", "");
                 try {
-                    page = Integer.parseInt(parts[1]);
+                    page = Integer.parseInt(numStr);
                 } catch (NumberFormatException ignored) {}
             }
         }

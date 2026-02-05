@@ -2,9 +2,11 @@ package io.github.mcclauneck.market.editor.util;
 
 import io.github.mcengine.mceconomy.api.enums.CurrencyType;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -161,16 +163,43 @@ public class EditorUtil {
 
         if (meta.hasLore()) {
             List<Component> lore = meta.lore();
-            // Robust check: check the last line for "Middle Click" marker using plain text serializer
-            // Remove last 7 lines if they match the editor layout
-            // This is safer than just blindly removing 7 lines if the item has less lore
-            if (lore != null && lore.size() >= 7) {
-                 String lastLine = PlainTextComponentSerializer.plainText().serialize(lore.get(lore.size() - 1));
-                 if (lastLine.contains("Middle Click")) {
-                     for (int i = 0; i < 7; i++) lore.remove(lore.size() - 1);
-                 }
+            if (lore != null) {
+                // Robust loop to strip multiple stacks of editor lore if they exist
+                while (!lore.isEmpty()) {
+                    Component lastLine = lore.get(lore.size() - 1);
+                    boolean isEditorFooter = false;
+
+                    // 1. Check by Translatable Key (Most reliable)
+                    if (lastLine instanceof TranslatableComponent tc) {
+                        if (tc.key().equals("mcclauneck.market.editor.lore.middle_hint")) {
+                            isEditorFooter = true;
+                        }
+                    }
+
+                    // 2. Check by Plain Text (Fallback for legacy/flattened components)
+                    // Checks for English "Middle Click" or Thai "คลิกเมาส์กลาง"
+                    if (!isEditorFooter) {
+                        String plain = PlainTextComponentSerializer.plainText().serialize(lastLine);
+                        if (plain.contains("Middle Click") || plain.contains("คลิกเมาส์กลาง")) {
+                            isEditorFooter = true;
+                        }
+                    }
+
+                    if (isEditorFooter) {
+                        // Remove the 7-line editor block
+                        int removeCount = 7;
+                        if (lore.size() < 7) removeCount = lore.size(); // Safety check
+                        
+                        for (int i = 0; i < removeCount; i++) {
+                            lore.remove(lore.size() - 1);
+                        }
+                    } else {
+                        // Stop if the bottom line is not part of the editor footer
+                        break;
+                    }
+                }
+                meta.lore(lore);
             }
-            meta.lore(lore);
         }
 
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
@@ -202,13 +231,25 @@ public class EditorUtil {
         pdc.set(kCur, PersistentDataType.STRING, currency.getName());
 
         // 2. Prepare Lore
+        // First, perform a clean-up to ensure we don't stack lore if this item is updated multiple times in the GUI
         List<Component> lore = meta.hasLore() ? meta.lore() : new java.util.ArrayList<>();
-        
-        // Remove old footer if exists to prevent stacking (using plain text check)
-        if (lore.size() >= 7) {
-            String lastLine = PlainTextComponentSerializer.plainText().serialize(lore.get(lore.size() - 1));
-            if (lastLine.contains("Middle Click")) {
-                for (int i = 0; i < 7; i++) lore.remove(lore.size() - 1);
+        if (lore != null) {
+            // Reuse the cleaning logic pattern
+            while (!lore.isEmpty()) {
+                Component lastLine = lore.get(lore.size() - 1);
+                boolean isFooter = false;
+                if (lastLine instanceof TranslatableComponent tc && tc.key().equals("mcclauneck.market.editor.lore.middle_hint")) isFooter = true;
+                else {
+                    String plain = PlainTextComponentSerializer.plainText().serialize(lastLine);
+                    if (plain.contains("Middle Click") || plain.contains("คลิกเมาส์กลาง")) isFooter = true;
+                }
+                
+                if (isFooter) {
+                    int removeCount = Math.min(7, lore.size());
+                    for (int i = 0; i < removeCount; i++) lore.remove(lore.size() - 1);
+                } else {
+                    break;
+                }
             }
         }
 
