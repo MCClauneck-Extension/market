@@ -38,7 +38,7 @@ repositories {
 dependencies {
     // MCEngine Core Dependencies
     compileOnly 'io.github.mcengine:mcextension:2026.0.2-7'
-    compileOnly 'io.github.mcengine:mceconomy-common:2026.0.0-4-SNAPSHOT'
+    compileOnly 'io.github.mcengine:mceconomy-common:2026.0.3-1-SNAPSHOT'
 
     compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT'
 }
@@ -83,3 +83,4 @@ jar {
         }
     }
 }
+
