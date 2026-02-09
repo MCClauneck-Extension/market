@@ -65,7 +65,7 @@ public class Market implements IMCExtension {
     @Override
     public void onLoad(JavaPlugin plugin, Executor executor) {
         // 1. Setup Data Folder
-        File marketFolder = new File(plugin.getDataFolder(), "extensions/Market");
+        File marketFolder = new File(plugin.getDataFolder(), "extensions/configs/Market");
         if (!marketFolder.exists()) {
             marketFolder.mkdirs();
         }
