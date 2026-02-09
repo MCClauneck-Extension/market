@@ -20,12 +20,10 @@ class VersionCalculator {
             def baseVersion = project.property('project-version')
             def iteration = project.findProperty('project-iteration') ?: "1"
             
-            if (isDevBuild && !isDevReleaseBuild) {
-                calculatedVersion = "${baseVersion}-${iteration}-${buildNum}-DEV"
-            } else if (isDevReleaseBuild) {
-                calculatedVersion = "${baseVersion}-${iteration}"
+            if (isDevBuild || isDevReleaseBuild) {
+                calculatedVersion = "${baseVersion}-build.${buildNum}"
             } else {
-                calculatedVersion = "${baseVersion}-${iteration}-SNAPSHOT"
+                calculatedVersion = "${baseVersion}-${iteration}"
             }
         }
         
