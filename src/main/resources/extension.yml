@@ -1,12 +1,9 @@
-# The unique identifier for this extension
-name: Market
-
-# The version of this extension
-version: ${project_version}
-
-# The full package path to your main class
-main: ${project_group}.market.Market
-
-# Optional: Ensure MCEconomy is loaded first
-base:
-  depend: [MCEconomy]
+name: "Market"
+main: "${project_group}.market.Market"
+version: "${project_version}"
+extension:
+  depend: []
+git:
+  provider: github
+  owner: ${git_org_name}
+  repository: ${git_org_repository}

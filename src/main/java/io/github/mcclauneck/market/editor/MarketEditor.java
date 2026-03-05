@@ -2,7 +2,7 @@ package io.github.mcclauneck.market.editor;
 
 import io.github.mcclauneck.market.common.MarketProvider;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
-import io.github.mcengine.mceconomy.api.enums.CurrencyType;
+import io.github.mcclauneck.mceconomy.api.enums.CurrencyType;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -97,7 +97,7 @@ public class MarketEditor implements Listener {
         File file = new File(marketFolder, marketName.toLowerCase() + ".yml");
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
         
-        Inventory gui = Bukkit.createInventory(null, 54, Component.translatable("mcclauneck.market.editor.title",
+        Inventory gui = Bukkit.createInventory(null, 54, Component.translatable("mcclauneck.market.editor.title", "Edit Market: %s | P%s",
             Component.text(marketName),
             Component.text(page)));
 
@@ -153,16 +153,16 @@ public class MarketEditor implements Listener {
 
         if (page > 1) {
             gui.setItem(45, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGNlYzgwN2RjYzE0MzYzMzRmZDRkYzlhYjM0OTM0MmY2YzUyYzllN2IyYmYzNDY3MTJkYjcyYTBkNmQ3YTQifX19", 
-                Component.translatable("mcclauneck.market.gui.previous_page")));
+                Component.translatable("mcclauneck.market.gui.previous_page", "Previous Page")));
         }
         boolean pageFull = (gui.getItem(44) != null);
         if (maxKey > (page * itemsPerPage) || pageFull) {
             gui.setItem(53, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTAxYzdiNTcyNjE3ODk3NGIzYjNhMDFiNDJhNTkwZTU0MzY2MDI2ZmQ0MzgwOGYyYTc4NzY0ODg0M2E3ZjVhIn19fQ==", 
-                Component.translatable("mcclauneck.market.gui.next_page")));
+                Component.translatable("mcclauneck.market.gui.next_page", "Next Page")));
         }
         
         gui.setItem(49, EditorUtil.createSkullButton("eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTc0MjgxZjk2NjlmMmNkY2Y3ODQ4NDQ4YTViYjYyODIzMmVlYTJiZmJkZmM3ZDRmMjBiZGE1MDMzZDAzMzY2YSJ9fX0=", 
-            Component.translatable("mcclauneck.market.editor.save")));
+            Component.translatable("mcclauneck.market.editor.save", "Save & Reload")));
 
         activeSessions.put(player.getUniqueId(), new EditorSession(marketName, page));
         player.openInventory(gui);
@@ -229,8 +229,8 @@ public class MarketEditor implements Listener {
                 EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
                 pendingChat.put(player.getUniqueId(), new EditAction(event.getSlot(), type));
                 player.closeInventory();
-                player.sendMessage(Component.translatable("mcclauneck.market.editor.enter_price", NamedTextColor.GREEN,
-                    Component.text(type)));
+                player.sendMessage(Component.translatable("mcclauneck.market.editor.enter_price", "Enter %s price in chat (-1 to disable):",
+                    Component.text(type)).color(NamedTextColor.GREEN));
             }
         } else if (event.getClick() == ClickType.MIDDLE) {
             event.setCancelled(true);
@@ -293,7 +293,7 @@ public class MarketEditor implements Listener {
                    }
                 });
             } catch (NumberFormatException e) {
-                event.getPlayer().sendMessage(Component.translatable("mcclauneck.market.error.invalid_number", NamedTextColor.RED));
+                event.getPlayer().sendMessage(Component.translatable("mcclauneck.market.error.invalid_number", "Invalid number.").color(NamedTextColor.RED));
                 Bukkit.getScheduler().runTask(plugin, () -> openEditor(event.getPlayer(), session.marketName, session.page));
             }
         }
@@ -315,7 +315,7 @@ public class MarketEditor implements Listener {
                 EditorSession session = activeSessions.remove(player.getUniqueId());
                 EditorUtil.savePage(marketFolder, session.marketName, session.page, event.getInventory(), keyBuy, keySell, keyCurrency);
                 provider.loadMarkets();
-                player.sendMessage(Component.translatable("mcclauneck.market.editor.saved", NamedTextColor.GREEN));
+                player.sendMessage(Component.translatable("mcclauneck.market.editor.saved", "Market saved!").color(NamedTextColor.GREEN));
             }
         }
     }
