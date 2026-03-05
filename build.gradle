@@ -1,3 +1,46 @@
 plugins {
-    id 'market.logic'
+    id 'java'
+    id 'io.github.mcengine.gradle.plugin.version-calculator' version '1.0.2'
+    id 'io.github.mcengine.gradle.plugin.plugin-export' version '1.0.2'
+}
+
+group = project.property('project-group')
+
+repositories {
+    mavenCentral()
+
+    maven {
+        name = 'mcclauneck-plugin'
+        url = uri('https://maven.pkg.github.com/MCClauneck/plugin-papermc')
+        credentials {
+            username = System.getenv('GITHUB_ACTOR') ?: System.getenv('AGENT_NAME') ?: System.getenv('USER_GITHUB_NAME')
+            password = System.getenv('GITHUB_TOKEN') ?: System.getenv('AGENT_TOKEN') ?: System.getenv('USER_GITHUB_TOKEN')
+        }
+    }
+
+    maven {
+        name = 'papermc'
+        url = 'https://repo.papermc.io/repository/maven-public/'
+    }
+}
+
+dependencies {
+    compileOnly 'io.github.mcclauneck:mceconomy-papermc:2026.0.4-2'
+    compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT'
+}
+
+processResources {
+    def props = [
+        'project_version': project.version,
+        'project_group': project.group,
+        'git_org_name': project.findProperty('git-org-name'),
+        'git_org_repository': project.findProperty('git-org-repository')
+    ]
+
+    inputs.properties(props)
+    filteringCharset 'UTF-8'
+
+    filesMatching('extension.yml') {
+        expand props
+    }
 }

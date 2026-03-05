@@ -2,8 +2,8 @@ package io.github.mcclauneck.market.common;
 
 import io.github.mcclauneck.market.api.IMarket;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
-import io.github.mcengine.mceconomy.api.enums.CurrencyType;
-import io.github.mcengine.mceconomy.common.MCEconomyProvider;
+import io.github.mcclauneck.mceconomy.api.enums.CurrencyType;
+import io.github.mcclauneck.mceconomy.common.MCEconomyProvider;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -191,7 +191,7 @@ public class MarketProvider implements IMarket {
 
         // 1. Check Inventory Space (Sync)
         if (player.getInventory().firstEmpty() == -1) {
-            player.sendMessage(Component.translatable("mcclauneck.market.error.inventory_full", NamedTextColor.RED));
+            player.sendMessage(Component.translatable("mcclauneck.market.error.inventory_full", "Inventory full!").color(NamedTextColor.RED));
             return;
         }
 
@@ -209,7 +209,7 @@ public class MarketProvider implements IMarket {
                             itemNameComponent = itemData.itemStack.getItemMeta().displayName();
                         } else {
                             // Fallback to translatable material name if no custom name
-                             itemNameComponent = Component.translatable(itemData.itemStack.getType().translationKey());
+                             itemNameComponent = Component.translatable(itemData.itemStack.getType().translationKey(), itemData.itemStack.getType().name());
                         }
                         
                         // If null (rare), fallback to plain string
@@ -217,13 +217,13 @@ public class MarketProvider implements IMarket {
                             itemNameComponent = Component.text(itemData.itemStack.getType().name());
                         }
                             
-                        player.sendMessage(Component.translatable("mcclauneck.market.buy.success", NamedTextColor.GREEN,
+                        player.sendMessage(Component.translatable("mcclauneck.market.buy.success", "Bought %sx %s for %s %s",
                             Component.text(itemData.itemStack.getAmount()),
                             itemNameComponent,
                             Component.text(itemData.buyPrice),
-                            Component.text(itemData.currency.getName())));
+                            Component.text(itemData.currency.getName())).color(NamedTextColor.GREEN));
                     } else {
-                        player.sendMessage(Component.translatable("mcclauneck.market.error.insufficient_funds", NamedTextColor.RED));
+                        player.sendMessage(Component.translatable("mcclauneck.market.error.insufficient_funds", "Insufficient funds!").color(NamedTextColor.RED));
                     }
                 });
             });
@@ -255,7 +255,7 @@ public class MarketProvider implements IMarket {
         // 1. Check & Remove Item (Sync)
         ItemStack toRemove = itemData.itemStack.clone();
         if (!player.getInventory().containsAtLeast(toRemove, toRemove.getAmount())) {
-            player.sendMessage(Component.translatable("mcclauneck.market.error.no_item_to_sell", NamedTextColor.RED));
+            player.sendMessage(Component.translatable("mcclauneck.market.error.no_item_to_sell", "You don't have enough items to sell!").color(NamedTextColor.RED));
             return;
         }
 
@@ -265,9 +265,9 @@ public class MarketProvider implements IMarket {
         MCEconomyProvider.getInstance().addCoin(player.getUniqueId().toString(), "PLAYER", itemData.currency, itemData.sellPrice)
             .thenAccept(success -> {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    player.sendMessage(Component.translatable("mcclauneck.market.sell.success", NamedTextColor.GREEN,
+                    player.sendMessage(Component.translatable("mcclauneck.market.sell.success", "Sold for %s %s",
                         Component.text(itemData.sellPrice),
-                        Component.text(itemData.currency.getName())));
+                        Component.text(itemData.currency.getName())).color(NamedTextColor.GREEN));
                 });
             });
     }

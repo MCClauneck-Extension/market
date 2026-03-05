@@ -6,7 +6,7 @@ import io.github.mcclauneck.market.editor.MarketEditor;
 import io.github.mcclauneck.market.editor.util.EditorUtil;
 import io.github.mcclauneck.market.listener.MarketListener;
 import io.github.mcclauneck.market.tabcompleter.MarketTabCompleter;
-import io.github.mcengine.mcextension.api.IMCExtension;
+import io.github.mcclauneck.mcextension.api.IMCExtension;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -101,26 +101,26 @@ public class Market implements IMCExtension {
                         // Handle "create" subcommand
                         if (args[0].equalsIgnoreCase("create")) {
                              if (!(sender instanceof Player player)) {
-                                sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", NamedTextColor.RED));
+                                sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", "Only players can use this command.").color(NamedTextColor.RED));
                                 return true;
                             }
                             if (!player.hasPermission("market.admin")) {
-                                player.sendMessage(Component.translatable("mcclauneck.market.command.permission_denied", NamedTextColor.RED));
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.permission_denied", "No permission.").color(NamedTextColor.RED));
                                 return true;
                             }
                             if (args.length < 2) {
-                                player.sendMessage(Component.translatable("mcclauneck.market.command.usage_create", NamedTextColor.RED));
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.usage_create", "Usage: /market create <name>").color(NamedTextColor.RED));
                                 return true;
                             }
                             
                             boolean created = provider.createMarket(args[1]);
                             if (created) {
-                                player.sendMessage(Component.translatable("mcclauneck.market.command.create_success", NamedTextColor.GREEN,
-                                    Component.text(args[1])));
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.create_success", "Market '%s' created successfully!",
+                                    Component.text(args[1])).color(NamedTextColor.GREEN));
                                 editor.openEditor(player, args[1]);
                             } else {
-                                player.sendMessage(Component.translatable("mcclauneck.market.command.create_exists", NamedTextColor.RED,
-                                    Component.text(args[1])));
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.create_exists", "Market '%s' already exists.",
+                                    Component.text(args[1])).color(NamedTextColor.RED));
                             }
                             return true;
                         }
@@ -128,15 +128,15 @@ public class Market implements IMCExtension {
                         // Handle "edit" subcommand
                         if (args[0].equalsIgnoreCase("edit")) {
                             if (!(sender instanceof Player player)) {
-                                sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", NamedTextColor.RED));
+                                sender.sendMessage(Component.translatable("mcclauneck.market.command.only_players", "Only players can use this command.").color(NamedTextColor.RED));
                                 return true;
                             }
                             if (!player.hasPermission("market.admin")) {
-                                player.sendMessage(Component.translatable("mcclauneck.market.command.permission_denied", NamedTextColor.RED));
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.permission_denied", "No permission.").color(NamedTextColor.RED));
                                 return true;
                             }
                             if (args.length < 2) {
-                                player.sendMessage(Component.translatable("mcclauneck.market.command.usage_edit", NamedTextColor.RED));
+                                player.sendMessage(Component.translatable("mcclauneck.market.command.usage_edit", "Usage: /market edit <name> [page]").color(NamedTextColor.RED));
                                 return true;
                             }
                             int page = 1;

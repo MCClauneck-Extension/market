@@ -2,7 +2,7 @@ package io.github.mcclauneck.market.editor.util;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
-import io.github.mcengine.mceconomy.api.enums.CurrencyType;
+import io.github.mcclauneck.mceconomy.api.enums.CurrencyType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TranslatableComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -242,15 +242,15 @@ public class EditorUtil {
 
         // 3. Append Editor Instructions
         lore.add(Component.text("----------------", NamedTextColor.DARK_GRAY));
-        lore.add(Component.translatable("mcclauneck.market.editor.lore.buy", NamedTextColor.GREEN, 
-            Component.text(buy >= 0 ? String.valueOf(buy) : "N/A")));
-        lore.add(Component.translatable("mcclauneck.market.editor.lore.sell", NamedTextColor.AQUA, 
-            Component.text(sell >= 0 ? String.valueOf(sell) : "N/A")));
-        lore.add(Component.translatable("mcclauneck.market.editor.lore.currency", NamedTextColor.GOLD, 
-            Component.text(currency.getName())));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.buy", "Buy: %s", 
+            Component.text(buy >= 0 ? String.valueOf(buy) : "N/A")).color(NamedTextColor.GREEN));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.sell", "Sell: %s", 
+            Component.text(sell >= 0 ? String.valueOf(sell) : "N/A")).color(NamedTextColor.AQUA));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.currency", "Currency: %s", 
+            Component.text(currency.getName())).color(NamedTextColor.GOLD));
         lore.add(Component.text("----------------", NamedTextColor.DARK_GRAY));
-        lore.add(Component.translatable("mcclauneck.market.editor.lore.shift_hint", NamedTextColor.YELLOW));
-        lore.add(Component.translatable("mcclauneck.market.editor.lore.middle_hint", NamedTextColor.YELLOW));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.shift_hint", "Shift+L: Set Buy | Shift+R: Set Sell").color(NamedTextColor.YELLOW));
+        lore.add(Component.translatable("mcclauneck.market.editor.lore.middle_hint", "Middle Click: Cycle Currency").color(NamedTextColor.YELLOW));
 
         meta.lore(lore);
         item.setItemMeta(meta);
